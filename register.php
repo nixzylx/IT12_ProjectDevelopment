@@ -15,7 +15,7 @@ unset($_SESSION['register_error']);
 
 <body class="login">
 <div class="transparentbox">
-  <form method="POST" action="login_register.php">
+  <form method="POST" action="register_process.php">
     <h1>Create Account</h1>
 
     <?php if (!empty($registerError)): ?>
@@ -28,7 +28,7 @@ unset($_SESSION['register_error']);
 
     <select name="role" required>
       <option value="">Select Role</option>
-      <option value="Owner">Owner</option>
+      <!--<option value="Owner">Owner</option>-->
       <option value="Business Partner">Business Partner</option>
       <option value="Employee">Mechanic</option>
     </select>
