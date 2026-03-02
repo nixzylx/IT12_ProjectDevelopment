@@ -2,13 +2,13 @@
 session_start();
 require_once 'dbconnection.php';
 
-// Check if user is logged in and is owner/business partner
+// check if user is logged in and is owner/business partner
 $role = $_SESSION['user_role'] ?? $_SESSION['role'] ?? null;
 if (!$role || !in_array(strtolower($role), ['owner', 'business_partner'])) {
     die('Access Denied. Only owners and business partners can access this page.');
 }
 
-// Handle approval/rejection
+// handle approval/rejection
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $employee_id = intval($_POST['employee_id'] ?? 0);
     $admin_id = $_SESSION['employeeID'] ?? 0;
@@ -147,6 +147,7 @@ $approved_result = $conn->query($approved_query);
             color: #065f46;
         }
     </style>
+    
 </head>
 <body>
     <?php include 'sidebar.php'; ?>

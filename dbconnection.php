@@ -1,12 +1,10 @@
 <?php
-// dbconnection.php - FIXED VERSION
 
 $servername = "localhost";
 $username = "root";
-$password = ""; // XAMPP default is empty
-$dbname = "autobert";
+$password = ""; 
+$dbname = "autobert_db";
 
-// First, try to connect without database to check if MySQL is running
 $temp_conn = @new mysqli($servername, $username, $password);
 
 if ($temp_conn->connect_error) {
@@ -45,4 +43,3 @@ if ($conn->connect_error) {
 }
 
 $conn->set_charset("utf8");
-?>

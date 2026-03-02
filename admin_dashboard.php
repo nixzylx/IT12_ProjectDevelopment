@@ -49,28 +49,28 @@ $_SESSION['email'] = $user['email'];
 
 // Get current date and greeting
 $todayLabel = date('l, F j, Y');
-$hourNow = (int)date('G');
+$hourNow = (int) date('G');
 $greeting = ($hourNow < 12) ? 'Good morning' : (($hourNow < 17) ? 'Good afternoon' : 'Good evening');
 
 // Initialize variables
-$totalRevenue = 0; 
-$activeJobs = 0; 
+$totalRevenue = 0;
+$activeJobs = 0;
 $completedToday = 0;
-$activeWarranties = 0; 
+$activeWarranties = 0;
 $unpaidInvoices = 0;
-$activeJobRows = []; 
-$monthlyRevenue = []; 
+$activeJobRows = [];
+$monthlyRevenue = [];
 $creditAccounts = [];
 $pendingApprovals = 0;
 
 // Fetch dashboard data with error handling
 if (isset($conn) && $conn) {
-    
+
     // Total Revenue - with error handling
     try {
         $res = $conn->query("SELECT COALESCE(SUM(amount_paid), 0) AS total FROM payments");
-        if ($res && $row = $res->fetch_assoc()) { 
-            $totalRevenue = $row['total'] ?? 0; 
+        if ($res && $row = $res->fetch_assoc()) {
+            $totalRevenue = $row['total'] ?? 0;
         }
     } catch (Exception $e) {
         $totalRevenue = 0;
@@ -80,8 +80,8 @@ if (isset($conn) && $conn) {
     // Active Jobs
     try {
         $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status != 'Completed' AND status != 'Cancelled'");
-        if ($res && $row = $res->fetch_assoc()) { 
-            $activeJobs = $row['cnt']; 
+        if ($res && $row = $res->fetch_assoc()) {
+            $activeJobs = $row['cnt'];
         }
     } catch (Exception $e) {
         $activeJobs = 0;
@@ -90,8 +90,8 @@ if (isset($conn) && $conn) {
     // Completed Today
     try {
         $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status = 'Completed' AND DATE(date_completed) = CURDATE()");
-        if ($res && $row = $res->fetch_assoc()) { 
-            $completedToday = $row['cnt']; 
+        if ($res && $row = $res->fetch_assoc()) {
+            $completedToday = $row['cnt'];
         }
     } catch (Exception $e) {
         $completedToday = 0;
@@ -100,8 +100,8 @@ if (isset($conn) && $conn) {
     // Active Warranties
     try {
         $res = $conn->query("SELECT COUNT(*) AS cnt FROM warranties WHERE warranty_end >= CURDATE() AND warranty_status = 'Active'");
-        if ($res && $row = $res->fetch_assoc()) { 
-            $activeWarranties = $row['cnt']; 
+        if ($res && $row = $res->fetch_assoc()) {
+            $activeWarranties = $row['cnt'];
         }
     } catch (Exception $e) {
         $activeWarranties = 0;
@@ -110,8 +110,8 @@ if (isset($conn) && $conn) {
     // Unpaid Invoices
     try {
         $res = $conn->query("SELECT COUNT(*) AS cnt FROM sales WHERE status = 'Unpaid'");
-        if ($res && $row = $res->fetch_assoc()) { 
-            $unpaidInvoices = $row['cnt']; 
+        if ($res && $row = $res->fetch_assoc()) {
+            $unpaidInvoices = $row['cnt'];
         }
     } catch (Exception $e) {
         $unpaidInvoices = 0;
@@ -131,8 +131,8 @@ if (isset($conn) && $conn) {
             WHERE jo.status != 'Completed' AND jo.status != 'Cancelled'
             ORDER BY jo.date_received DESC LIMIT 10
         ");
-        while ($res && $row = $res->fetch_assoc()) { 
-            $activeJobRows[] = $row; 
+        while ($res && $row = $res->fetch_assoc()) {
+            $activeJobRows[] = $row;
         }
     } catch (Exception $e) {
         $activeJobRows = [];
@@ -148,8 +148,8 @@ if (isset($conn) && $conn) {
             GROUP BY DATE_FORMAT(payment_date, '%Y-%m')
             ORDER BY payment_date ASC
         ");
-        while ($res && $row = $res->fetch_assoc()) { 
-            $monthlyRevenue[] = $row; 
+        while ($res && $row = $res->fetch_assoc()) {
+            $monthlyRevenue[] = $row;
         }
     } catch (Exception $e) {
         $monthlyRevenue = [];
@@ -166,8 +166,8 @@ if (isset($conn) && $conn) {
             WHERE ca.current_balance > 0
             ORDER BY ca.current_balance DESC LIMIT 5
         ");
-        while ($res && $row = $res->fetch_assoc()) { 
-            $creditAccounts[] = $row; 
+        while ($res && $row = $res->fetch_assoc()) {
+            $creditAccounts[] = $row;
         }
     } catch (Exception $e) {
         $creditAccounts = [];
@@ -191,79 +191,6 @@ $isOwner = strtolower($role) === 'owner';
     <title>AutoBert — Admin Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <style>
-        .pending-approvals-badge {
-            background: #f97316;
-            color: white;
-            border-radius: 20px;
-            padding: 2px 8px;
-            font-size: 11px;
-            margin-left: 8px;
-        }
-        
-        .mechanic-info {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        .mechanic-avatar {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background: #e5e7eb;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            font-weight: 600;
-            color: #4b5563;
-        }
-        
-        .job-id {
-            font-family: 'Syne', sans-serif;
-            font-weight: 600;
-            color: var(--accent);
-        }
-        
-        .vehicle-info {
-            font-size: 12px;
-            color: #6b7280;
-        }
-        
-        .due-soon {
-            color: #f97316;
-            font-weight: 500;
-        }
-        
-        .overdue {
-            color: #dc2626;
-            font-weight: 500;
-        }
-        
-        .logout-btn {
-            background: none;
-            border: 1px solid var(--border);
-            color: #6b7280;
-            padding: 6px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-left: 10px;
-        }
-        
-        .logout-btn:hover {
-            background: #fee2e2;
-            border-color: #dc2626;
-            color: #dc2626;
-        }
-        
-        .stat-link {
-            text-decoration: none;
-            color: inherit;
-            display: block;
-        }
-    </style>
 </head>
 
 <body>
@@ -477,23 +404,23 @@ $isOwner = strtolower($role) === 'owner';
                                         <div class="empty-state">
                                             <div class="empty-icon">🔧</div>
                                             <div class="empty-text">No active job orders</div>
-                                            <button class="btn-primary" style="margin-top: 16px;" onclick="window.location.href='new_job_order.php'">
-                                                Create New Job Order
-                                            </button>
                                         </div>
                                     </td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($activeJobRows as $job): ?>
-                                    <tr onclick="window.location.href='job_details.php?id=<?= $job['job_order_id'] ?>'" style="cursor: pointer;">
+                                    <tr onclick="window.location.href='job_details.php?id=<?= $job['job_order_id'] ?>'"
+                                        style="cursor: pointer;">
                                         <td>
-                                            <span class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
+                                            <span
+                                                class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
                                         </td>
                                         <td>
                                             <div><?= htmlspecialchars($job['customer']) ?></div>
                                             <div class="vehicle-info"><?= htmlspecialchars($job['vehicle']) ?></div>
                                         </td>
-                                        <td><?= htmlspecialchars(substr($job['service'], 0, 30)) ?><?= strlen($job['service']) > 30 ? '...' : '' ?></td>
+                                        <td><?= htmlspecialchars(substr($job['service'], 0, 30)) ?><?= strlen($job['service']) > 30 ? '...' : '' ?>
+                                        </td>
                                         <td>
                                             <?php if (!empty($job['mechanic'])): ?>
                                                 <div class="mechanic-info">
@@ -507,7 +434,8 @@ $isOwner = strtolower($role) === 'owner';
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <span class="status-badge status-<?= strtolower(str_replace(' ', '-', $job['status'])) ?>">
+                                            <span
+                                                class="status-badge status-<?= strtolower(str_replace(' ', '-', $job['status'])) ?>">
                                                 <?= htmlspecialchars($job['status']) ?>
                                             </span>
                                         </td>
@@ -564,7 +492,8 @@ $isOwner = strtolower($role) === 'owner';
                         <a class="card-link" href="reports.php">Full Report →</a>
                     </div>
                     <div class="mini-chart">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
                             <div>
                                 <div style="font-family:'Syne',sans-serif; font-size: 24px; font-weight: 700;">
                                     ₱<?= number_format($totalRevenue, 2) ?>
@@ -574,7 +503,7 @@ $isOwner = strtolower($role) === 'owner';
                         </div>
                         <div class="chart-bars">
                             <?php if (empty($monthlyRevenue)): ?>
-                                <?php 
+                                <?php
                                 $last6Months = [];
                                 for ($i = 5; $i >= 0; $i--) {
                                     $last6Months[] = date('M', strtotime("-$i months"));
@@ -588,10 +517,10 @@ $isOwner = strtolower($role) === 'owner';
                             <?php else: ?>
                                 <?php foreach ($monthlyRevenue as $m):
                                     $pct = max(20, min(80, round(($m['total'] / $maxRev) * 80)));
-                                ?>
+                                    ?>
                                     <div class="bar-wrap">
-                                        <div class="bar active" style="height: <?= $pct ?>px;" 
-                                             title="₱<?= number_format($m['total'], 2) ?>">
+                                        <div class="bar active" style="height: <?= $pct ?>px;"
+                                            title="₱<?= number_format($m['total'], 2) ?>">
                                         </div>
                                         <span class="bar-label"><?= htmlspecialchars($m['month']) ?></span>
                                     </div>
@@ -617,13 +546,13 @@ $isOwner = strtolower($role) === 'owner';
                                 <div class="empty-text">No credit accounts with balance</div>
                             </div>
                         <?php else: ?>
-                            <?php foreach ($creditAccounts as $ca): 
+                            <?php foreach ($creditAccounts as $ca):
                                 $balance = floatval($ca['current_balance']);
                                 $limit = floatval($ca['credit_limit']);
                                 $usage_percent = $limit > 0 ? ($balance / $limit) * 100 : 0;
                                 $days_until_due = $ca['days_until_due'] ?? 30;
                                 $due_class = $days_until_due < 0 ? 'overdue' : ($days_until_due < 7 ? 'due-soon' : '');
-                            ?>
+                                ?>
                                 <div class="credit-row">
                                     <div>
                                         <div class="credit-name">
@@ -668,9 +597,10 @@ $isOwner = strtolower($role) === 'owner';
         }
 
         // Auto-refresh data every 5 minutes (300000 ms)
-        setTimeout(function() {
+        setTimeout(function () {
             location.reload();
         }, 300000);
     </script>
 </body>
+
 </html>
