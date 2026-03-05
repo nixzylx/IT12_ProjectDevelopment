@@ -5,13 +5,11 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once __DIR__ . '/dbconnection.php';
 
-// SECURITY CHECK 1: Verify user is logged in
 if (!isset($_SESSION['employeeID'])) {
     header("Location: index.php?error=Please log in first");
     exit();
 }
 
-// SECURITY CHECK 2: Verify user is still approved and get latest data
 $stmt = $conn->prepare("SELECT first_name, last_name, role, is_approved, email FROM employee WHERE employeeID = ?");
 $stmt->bind_param("i", $_SESSION['employeeID']);
 $stmt->execute();
@@ -20,13 +18,12 @@ $user = $result->fetch_assoc();
 $stmt->close();
 
 if (!$user) {
-    // User doesn't exist in database anymore
     session_destroy();
     header("Location: index.php?error=Account not found");
     exit();
 }
 
-// SECURITY CHECK 3: Check if account is approved
+// Check if account is approved
 if ($user['is_approved'] == 0) {
     session_destroy();
     header("Location: index.php?error=Your account is pending approval");
@@ -35,7 +32,7 @@ if ($user['is_approved'] == 0) {
 
 // SECURITY CHECK 4: Verify user has owner or business partner role
 $role = $user['role'];
-if (!in_array(strtolower($role), ['owner', 'business_partner'])) {
+if (!in_array(strtolower($role), ['owner', 'business partner'])) {
     die('Access Denied. You do not have permission to view this page. 
          <br><a href="index.php">Return to Login</a>');
 }
@@ -62,6 +59,66 @@ $activeJobRows = [];
 $monthlyRevenue = [];
 $creditAccounts = [];
 $pendingApprovals = 0;
+
+// Notifications data 
+$notifications = [];
+
+// Unpaid invoices
+try {
+    $res = $conn->query("SELECT s.sales_id, CONCAT(c.first_name,' ',c.last_name) AS customer, s.final_amount, s.sales_date
+                         FROM sales s JOIN customers c ON s.customer_id = c.customer_id
+                         WHERE s.status = 'Unpaid' ORDER BY s.sales_date DESC LIMIT 5");
+    while ($res && $row = $res->fetch_assoc()) {
+        $notifications[] = [
+            'type'    => 'unpaid',
+            'icon'    => 'bi-exclamation-circle-fill',
+            'color'   => '#f97316',
+            'title'   => 'Unpaid Invoice',
+            'message' => htmlspecialchars($row['customer']) . ' — ₱' . number_format($row['final_amount'], 2),
+            'time'    => $row['sales_date'],
+            'link'    => 'sales.php?status=Unpaid',
+        ];
+    }
+} catch (Exception $e) {}
+
+// Pending approvals
+try {
+    $res = $conn->query("SELECT first_name, last_name, role, created_at FROM employee WHERE is_approved = 0 ORDER BY created_at DESC LIMIT 5");
+    while ($res && $row = $res->fetch_assoc()) {
+        $notifications[] = [
+            'type'    => 'approval',
+            'icon'    => 'bi-person-fill-exclamation',
+            'color'   => '#2563eb',
+            'title'   => 'Pending Approval',
+            'message' => htmlspecialchars($row['first_name'].' '.$row['last_name']) . ' (' . htmlspecialchars($row['role']) . ')',
+            'time'    => $row['created_at'],
+            'link'    => 'admin_approvals.php',
+        ];
+    }
+} catch (Exception $e) {}
+
+// Active job orders
+try {
+    $res = $conn->query("SELECT jo.job_order_id, CONCAT(c.first_name,' ',c.last_name) AS customer, jo.status, jo.date_received
+                         FROM job_orders jo JOIN customers c ON jo.customer_id = c.customer_id
+                         WHERE jo.status IN ('Pending','Ongoing') ORDER BY jo.date_received DESC LIMIT 3");
+    while ($res && $row = $res->fetch_assoc()) {
+        $notifications[] = [
+            'type'    => 'job',
+            'icon'    => 'bi-wrench-adjustable-circle-fill',
+            'color'   => '#16a34a',
+            'title'   => 'Active Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT),
+            'message' => htmlspecialchars($row['customer']) . ' — ' . htmlspecialchars($row['status']),
+            'time'    => $row['date_received'],
+            'link'    => 'job_orders.php',
+        ];
+    }
+} catch (Exception $e) {}
+
+// Sort by time descending
+usort($notifications, fn($a, $b) => strtotime($b['time']) - strtotime($a['time']));
+$notifCount = count($notifications);
+
 
 // Fetch dashboard data with error handling
 if (isset($conn) && $conn) {
@@ -186,11 +243,126 @@ $isOwner = strtolower($role) === 'owner';
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AutoBert — Admin Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        
+        .notif-count {
+            position: absolute;
+            top: -6px; right: -6px;
+            background: var(--red);
+            color: #fff;
+            border-radius: 50%;
+            width: 18px; height: 18px;
+            font-size: 10px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            border: 2px solid #fff;
+        }
+
+        .notif-panel {
+            display: none;
+            position: absolute;
+            top: 54px; right: 16px;
+            width: 360px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.14);
+            z-index: 200;
+            overflow: hidden;
+            animation: fadeUp 0.2s ease;
+        }
+        .notif-panel.open { display: block; }
+
+        .notif-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .notif-panel-title {
+            font-weight: 700;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+        }
+
+        .notif-panel-title i { color: var(--accent); }
+
+        .notif-panel-badge {
+            background: var(--accent);
+            color: #fff;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .notif-panel-body { max-height: 360px;overflow-y: auto; }
+        .notif-panel-body::-webkit-scrollbar { width: 4px; }
+        .notif-panel-body::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 4px; }
+
+        .notif-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 20px;
+            border-bottom: 1px solid #f3f4f6;
+            text-decoration: none;
+            color: inherit;
+            transition: background 0.15s;
+        }
+
+        .notif-item:hover { background: #f9fafb; }
+        .notif-item:last-child { border-bottom: none; }
+
+        .notif-item-icon {
+            width: 38px; height: 38px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .notif-item-content { flex: 1; min-width: 0; }
+        .notif-item-title   { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+        .notif-item-message { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .notif-item-time    { font-size: 11px; color: #bbb; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+
+        .notif-empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .notif-empty i { font-size: 36px; display: block; margin-bottom: 10px; opacity: .3; }
+        .notif-empty p { font-size: 13px; }
+
+        .notif-panel-footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            background: #f9fafb;
+        }
+
+        .notif-panel-footer a {
+            font-size: 12px;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .notif-panel-footer a:hover { text-decoration: underline; }
+        .topbar { position: relative; }
+    </style>
 </head>
 
 <body>
@@ -296,10 +468,58 @@ $isOwner = strtolower($role) === 'owner';
             </div>
 
             <div class="topbar-right">
-                <div class="icon-btn">
+                <!-- Notification Bell -->
+                <div class="icon-btn notif-trigger" onclick="toggleNotifPanel()" id="notifBtn" style="position:relative;">
                     <i class="bi bi-bell"></i>
-                    <?php if ($unpaidInvoices > 0 || $pendingApprovals > 0): ?>
+                    <?php if ($notifCount > 0): ?>
                         <div class="notif-dot"></div>
+                        <span class="notif-count"><?= $notifCount ?></span>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Notification Panel -->
+                <div class="notif-panel" id="notifPanel">
+                    <div class="notif-panel-header">
+                        <span class="notif-panel-title"><i class="bi bi-bell-fill"></i> Notifications</span>
+                        <?php if ($notifCount > 0): ?>
+                            <span class="notif-panel-badge"><?= $notifCount ?> new</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="notif-panel-body">
+                        <?php if (empty($notifications)): ?>
+                            <div class="notif-empty">
+                                <i class="bi bi-bell-slash"></i>
+                                <p>You're all caught up!</p>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach ($notifications as $n): ?>
+                            <a href="<?= $n['link'] ?>" class="notif-item">
+                                <div class="notif-item-icon" style="background: <?= $n['color'] ?>22; color: <?= $n['color'] ?>;">
+                                    <i class="bi <?= $n['icon'] ?>"></i>
+                                </div>
+                                <div class="notif-item-content">
+                                    <div class="notif-item-title"><?= $n['title'] ?></div>
+                                    <div class="notif-item-message"><?= $n['message'] ?></div>
+                                    <div class="notif-item-time">
+                                        <i class="bi bi-clock"></i>
+                                        <?php
+                                        $diff = time() - strtotime($n['time']);
+                                        if ($diff < 60)          echo 'Just now';
+                                        elseif ($diff < 3600)    echo floor($diff/60) . 'm ago';
+                                        elseif ($diff < 86400)   echo floor($diff/3600) . 'h ago';
+                                        else                     echo date('M d, Y', strtotime($n['time']));
+                                        ?>
+                                    </div>
+                                </div>
+                            </a>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($notifCount > 0): ?>
+                    <div class="notif-panel-footer">
+                        <a href="admin_approvals.php">View all approvals →</a>
+                        <a href="sales.php?status=Unpaid">View unpaid →</a>
+                    </div>
                     <?php endif; ?>
                 </div>
                 <button class="btn-primary" onclick="window.location.href='new_job_order.php'">
@@ -600,6 +820,21 @@ $isOwner = strtolower($role) === 'owner';
         setTimeout(function () {
             location.reload();
         }, 300000);
+    </script>
+    <script>
+        function toggleNotifPanel() {
+            const panel = document.getElementById('notifPanel');
+            panel.classList.toggle('open');
+        }
+
+        // Close panel when clicking outside
+        document.addEventListener('click', function(e) {
+            const panel  = document.getElementById('notifPanel');
+            const btn    = document.getElementById('notifBtn');
+            if (panel && !panel.contains(e.target) && !btn.contains(e.target)) {
+                panel.classList.remove('open');
+            }
+        });
     </script>
 </body>
 
