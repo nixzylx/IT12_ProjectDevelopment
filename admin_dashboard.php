@@ -99,8 +99,8 @@ try {
 
 // Active job orders
 try {
-    $res = $conn->query("SELECT jo.job_order_id, CONCAT(c.first_name,' ',c.last_name) AS customer, jo.status, jo.date_received
-                         FROM job_orders jo JOIN customers c ON jo.customer_id = c.customer_id
+    $res = $conn->query("SELECT jo.new_job_order_id, CONCAT(c.first_name,' ',c.last_name) AS customer, jo.status, jo.date_received
+                         FROM new_job_order jo JOIN customers c ON jo.customer_id = c.customer_id
                          WHERE jo.status IN ('Pending','Ongoing') ORDER BY jo.date_received DESC LIMIT 3");
     while ($res && $row = $res->fetch_assoc()) {
         $notifications[] = [
@@ -110,7 +110,7 @@ try {
             'title'   => 'Active Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT),
             'message' => htmlspecialchars($row['customer']) . ' — ' . htmlspecialchars($row['status']),
             'time'    => $row['date_received'],
-            'link'    => 'job_orders.php',
+            'link'    => 'new_job_order.php',
         ];
     }
 } catch (Exception $e) {}
@@ -136,7 +136,7 @@ if (isset($conn) && $conn) {
 
     // Active Jobs
     try {
-        $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status != 'Completed' AND status != 'Cancelled'");
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM new_job_order WHERE status != 'Completed' AND status != 'Cancelled'");
         if ($res && $row = $res->fetch_assoc()) {
             $activeJobs = $row['cnt'];
         }
@@ -146,7 +146,7 @@ if (isset($conn) && $conn) {
 
     // Completed Today
     try {
-        $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status = 'Completed' AND DATE(date_completed) = CURDATE()");
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM new_job_order WHERE status = 'Completed' AND DATE(date_completed) = CURDATE()");
         if ($res && $row = $res->fetch_assoc()) {
             $completedToday = $row['cnt'];
         }
@@ -182,7 +182,7 @@ if (isset($conn) && $conn) {
                    CONCAT(v.brand, ' ', v.model) AS vehicle,
                    jo.job_description AS service,
                    jo.status
-            FROM job_orders jo
+            FROM new_job_order jo
             LEFT JOIN customers c ON jo.customer_id = c.customer_id
             LEFT JOIN vehicles v ON jo.vehicle_id = v.vehicle_id
             WHERE jo.status != 'Completed' AND jo.status != 'Cancelled'
@@ -384,7 +384,7 @@ $isOwner = strtolower($role) === 'owner';
             <a class="nav-item active" href="admin_dashboard.php">
                 <i class="bi bi-speedometer2"></i> Dashboard
             </a>
-            <a class="nav-item" href="job_orders.php">
+            <a class="nav-item" href="new_job_order.php">
                 <i class="bi bi-clipboard-data"></i> Job Orders
                 <?php if ($activeJobs > 0): ?>
                     <span class="pending-approvals-badge" style="background: var(--accent);"><?= $activeJobs ?></span>
@@ -550,7 +550,7 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="job_orders.php?status=active" class="stat-link">
+                <a href="new_job_order.php?status=active" class="stat-link">
                     <div class="stat-card">
                         <div class="stat-icon">🔧</div>
                         <div class="stat-label">Active Jobs</div>
@@ -561,7 +561,7 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="job_orders.php?status=completed&date=today" class="stat-link">
+                <a href="new_job_order.php?status=completed&date=today" class="stat-link">
                     <div class="stat-card">
                         <div class="stat-icon">✅</div>
                         <div class="stat-label">Completed Today</div>
@@ -604,7 +604,7 @@ $isOwner = strtolower($role) === 'owner';
                             <div class="card-title">Active Job Orders</div>
                             <div class="card-sub">Currently in progress</div>
                         </div>
-                        <a class="card-link" href="job_orders.php">View all →</a>
+                        <a class="card-link" href="new_job_order.php">View all →</a>
                     </div>
 
                     <table class="job-table">
@@ -676,7 +676,7 @@ $isOwner = strtolower($role) === 'owner';
                             <div class="qa-icon">📋</div>
                             New Job Order
                         </button>
-                        <button class="qa-btn" onclick="window.location.href='record_payment.php'">
+                        <button class="qa-btn" onclick="window.location.href='payments.php'">
                             <div class="qa-icon">💳</div>
                             Record Payment
                         </button>
