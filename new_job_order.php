@@ -734,7 +734,7 @@ if (isset($_GET['view'])) {
         <nav class="nav-section">
             <div class="nav-label">Main</div>
             <a class="nav-item" href="admin_dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a>
-            <a class="nav-item active" href="job_orders.php"><i class="bi bi-clipboard-data"></i> Job Orders</a>
+            <a class="nav-item active" href="new_job_order.php"><i class="bi bi-clipboard-data"></i> Job Orders</a>
             <a class="nav-item" href="sales.php"><i class="bi bi-currency-dollar"></i> Sales</a>
             <a class="nav-item" href="payments.php"><i class="bi bi-credit-card"></i> Payments</a>
             <a class="nav-item" href="products.php"><i class="bi bi-box-seam"></i> Products</a>
@@ -836,7 +836,7 @@ if (isset($_GET['view'])) {
                         <input type="date" name="date_to" value="<?= $filter_date_to ?>">
                         <button type="submit" class="btn-primary"><i class="bi bi-funnel"></i> Filter</button>
                         <?php if ($filter_status !== 'all' || !empty($filter_search) || $filter_customer > 0): ?>
-                            <a href="job_orders.php" class="btn-outline">Clear</a>
+                            <a href="new_job_order.php" class="btn-outline">Clear</a>
                         <?php endif; ?>
                     </div>
                 </form>
@@ -1111,7 +1111,7 @@ if (isset($_GET['view'])) {
 
         // View job details
         function viewJobDetails(jobId) {
-            window.location.href = 'job_orders.php?view=' + jobId;
+            window.location.href = 'new_job_order.php?view=' + jobId;
         }
 
         // Initialize vehicle filtering on page load

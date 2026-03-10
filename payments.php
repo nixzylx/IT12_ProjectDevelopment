@@ -217,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Filters
 $filter_method = $_GET['method'] ?? 'all';
-$filter_date_from = $_GET['date_from'] ?? date('Y-m-01');
+$filter_date_from = $_GET['date_from'] ?? date('Y-01-01');
 $filter_date_to = $_GET['date_to'] ?? date('Y-m-d');
 $filter_search = trim($_GET['search'] ?? '');
 
@@ -811,7 +811,7 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
         <nav class="nav-section">
             <div class="nav-label">Main</div>
             <a class="nav-item" href="admin_dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a>
-            <a class="nav-item" href="job_orders.php">
+            <a class="nav-item" href="new_job_order.php">
                 <i class="bi bi-clipboard-data"></i> Job Orders
                 <?php if ($activeJobs > 0): ?>
                     <span class="pending-approvals-badge"><?= $activeJobs ?></span>

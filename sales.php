@@ -1,7 +1,6 @@
 <?php
 session_start();
 require_once 'dbconnection.php';
-
 if (!isset($_SESSION['employeeID'])) {
     header("Location: index.php?error=Please log in first");
     exit();
@@ -18,12 +17,10 @@ if (!$user || $user['is_approved'] == 0) {
     header("Location: index.php?error=Access denied");
     exit();
 }
-
 $role = $user['role'];
 $firstname = htmlspecialchars($user['first_name']);
 $isOwner = strtolower($role) === 'owner';
 $userInitials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['last_name'], 0, 1));
-
 $successMsg = '';
 $errorMsg = '';
 
@@ -34,8 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $job_order_id = intval($_POST['job_order_id'] ?? 0) ?: null;
         $discount = floatval($_POST['discount'] ?? 0);
         $processed_by = $_SESSION['employeeID'];
-
-        $items = $_POST['items'] ?? [];   // array of {type, product_id, description, qty, unit_price}
+        $items = $_POST['items'] ?? []; 
 
         if ($customer_id && !empty($items)) {
             $total = 0;
@@ -43,7 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $total += floatval($item['unit_price']) * intval($item['qty']);
             }
             $final_amount = max(0, $total - $discount);
-
             $conn->begin_transaction();
             try {
                 // insert sale
@@ -52,7 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $s->execute();
                 $sales_id = $conn->insert_id;
                 $s->close();
-
                 // insert items
                 foreach ($items as $item) {
                     $itype = $item['type'];
@@ -61,27 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $qty = intval($item['qty']);
                     $uprice = floatval($item['unit_price']);
                     $subtotal = $uprice * $qty;
-
-                    $si = $conn->prepare("INSERT INTO sales_items (sales_id, product_id, item_type, description, quantity, unit_price, subtotal) VALUES (?,?,?,?,?,?,?)");
-                    $si->bind_param("iissid d", $sales_id, $prod_id, $itype, $desc, $qty, $uprice, $subtotal);
-                    $si->close();
-
-                    $si2 = $conn->prepare("INSERT INTO sales_items (sales_id, product_id, item_type, description, quantity, unit_price, subtotal) VALUES (?,?,?,?,?,?,?)");
-                    $si2->bind_param("iissids", $sales_id, $prod_id, $itype, $desc, $qty, $uprice, $subtotal);
-                    $si2->close();
-
                     // direct query with proper escaping and null handling
                     $prod_val = $prod_id === null ? "NULL" : intval($prod_id);
                     $conn->query("INSERT INTO sales_items (sales_id, product_id, item_type, description, quantity, unit_price, subtotal)
                                   VALUES ($sales_id, $prod_val, '" . $conn->real_escape_string($itype) . "',
                                          '" . $conn->real_escape_string($desc) . "', $qty, $uprice, $subtotal)");
-
                     // update stock 
                     if ($prod_id && $itype === 'Product') {
                         $conn->query("UPDATE products SET stock_quantity = stock_quantity - $qty WHERE product_id = $prod_id");
                     }
                 }
-
                 $conn->commit();
                 $successMsg = "Sale #" . str_pad($sales_id, 5, '0', STR_PAD_LEFT) . " created successfully!";
             } catch (Exception $e) {
@@ -92,7 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $errorMsg = "Please select a customer and add at least one item.";
         }
     }
-
     if ($_POST['action'] === 'record_payment') {
         $sales_id = intval($_POST['sales_id'] ?? 0);
         $payment_method = $conn->real_escape_string($_POST['payment_method'] ?? 'Cash');
@@ -100,38 +82,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $reference = $conn->real_escape_string($_POST['reference_number'] ?? '');
 
         if ($sales_id && $amount_paid > 0) {
-            $conn->query("INSERT INTO payments (sales_id, payment_method, amount_paid, reference_number)
-                          VALUES ($sales_id, '$payment_method', $amount_paid, '$reference')");
+            // Check current status — block if already fully paid
+            $sale_res = $conn->query("SELECT final_amount, status FROM sales WHERE sales_id = $sales_id");
+            $sale_row = $sale_res ? $sale_res->fetch_assoc() : null;
+            $final_amt = floatval($sale_row['final_amount'] ?? 0);
+            $current_status = $sale_row['status'] ?? '';
 
-            // update sale status
-            $total_paid_res = $conn->query("SELECT SUM(amount_paid) AS paid FROM payments WHERE sales_id = $sales_id");
-            $total_paid = $total_paid_res->fetch_assoc()['paid'] ?? 0;
-
-            $sale_res = $conn->query("SELECT final_amount FROM sales WHERE sales_id = $sales_id");
-            $final_amt = $sale_res->fetch_assoc()['final_amount'] ?? 0;
-
-            if ($total_paid >= $final_amt) {
-                $new_status = 'Paid';
-            } elseif ($total_paid > 0) {
-                $new_status = 'Partially Paid';
+            if ($current_status === 'Paid') {
+                $errorMsg = "This sale is already fully paid. No additional payment is needed.";
             } else {
-                $new_status = 'Unpaid';
-            }
+                // Check how much has already been paid and cap at remaining balance
+                $paid_res = $conn->query("SELECT COALESCE(SUM(amount_paid),0) AS paid FROM payments WHERE sales_id = $sales_id");
+                $already_paid = floatval($paid_res->fetch_assoc()['paid']);
+                $amount_to_record = min($amount_paid, $final_amt - $already_paid);
+                $cust_res = $conn->query("SELECT customer_id FROM sales WHERE sales_id = $sales_id");
+                $payment_customer_id = intval($cust_res && ($cr = $cust_res->fetch_assoc()) ? $cr["customer_id"] : 0);
+                $processed_by = intval($_SESSION["employeeID"]);
+                $conn->query("INSERT INTO payments (sales_id, customer_id, payment_method, amount_paid, reference_number, processed_by) VALUES ($sales_id, $payment_customer_id, '$payment_method', $amount_to_record, '$reference', $processed_by)");
+                // Recalculate total paid and update status
+                $total_paid_res = $conn->query("SELECT SUM(amount_paid) AS paid FROM payments WHERE sales_id = $sales_id");
+                $total_paid = floatval($total_paid_res->fetch_assoc()['paid']);
 
-            $conn->query("UPDATE sales SET status = '$new_status' WHERE sales_id = $sales_id");
-            $successMsg = "Payment recorded. Sale status: $new_status.";
+                if ($total_paid >= $final_amt) {
+                    $new_status = 'Paid';
+                } elseif ($total_paid > 0) {
+                    $new_status = 'Partially Paid';
+                } else {
+                    $new_status = 'Unpaid';
+                }
+                $conn->query("UPDATE sales SET status = '$new_status' WHERE sales_id = $sales_id");
+                // Redirect to payments.php after recording
+                header("Location: payments.php?success=Payment+recorded+successfully");
+                exit();
+            }
         } else {
             $errorMsg = "Invalid payment data.";
         }
     }
 }
-
 // filters 
 $filter_status = $_GET['status'] ?? 'all';
 $filter_search = trim($_GET['search'] ?? '');
 $filter_date = $_GET['date'] ?? '';
-
 $where_clauses = [];
+
 if ($filter_status !== 'all') {
     $safe_status = $conn->real_escape_string($filter_status);
     $where_clauses[] = "s.status = '$safe_status'";
@@ -145,7 +139,6 @@ if ($filter_date !== '') {
     $where_clauses[] = "DATE(s.sales_date) = '$safe_date'";
 }
 $where_sql = $where_clauses ? 'WHERE ' . implode(' AND ', $where_clauses) : '';
-
 // sales list with customer and employee names, and total paid amount
 $sales_rows = [];
 $res = $conn->query("
@@ -163,15 +156,17 @@ $res = $conn->query("
 while ($res && $row = $res->fetch_assoc()) {
     $sales_rows[] = $row;
 }
-
 // summary stats
 $stats = ['total_sales' => 0, 'total_revenue' => 0, 'unpaid' => 0, 'paid_today' => 0];
 $s_res = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(final_amount),0) AS rev FROM sales");
+
 if ($s_res && $r = $s_res->fetch_assoc()) {
     $stats['total_sales'] = $r['cnt'];
     $stats['total_revenue'] = $r['rev'];
 }
+
 $u_res = $conn->query("SELECT COUNT(*) AS cnt FROM sales WHERE status='Unpaid'");
+
 if ($u_res && $r = $u_res->fetch_assoc())
     $stats['unpaid'] = $r['cnt'];
 
@@ -180,36 +175,37 @@ $stat_date_ts = strtotime($stat_date_raw);
 $stat_date = $stat_date_ts ? date('Y-m-d', $stat_date_ts) : date('Y-m-d');
 $stat_label = ($filter_date !== '') ? date('M d, Y', $stat_date_ts) : 'today';
 $t_res = $conn->query("SELECT COALESCE(SUM(amount_paid),0) AS paid FROM payments WHERE DATE(payment_date)='$stat_date'");
+
 if ($t_res && $r = $t_res->fetch_assoc())
     $stats['paid_today'] = $r['paid'];
 
 // data for modals (dropdowns)
 $customers = [];
 $c_res = $conn->query("SELECT customer_id, CONCAT(first_name,' ',last_name) AS name FROM customers ORDER BY first_name");
+
 while ($c_res && $r = $c_res->fetch_assoc())
     $customers[] = $r;
-
 $products = [];
 $p_res = $conn->query("SELECT product_id, product_name, unit_price, stock_quantity FROM products ORDER BY product_name");
+
 while ($p_res && $r = $p_res->fetch_assoc())
     $products[] = $r;
-
 $job_orders = [];
 $j_res = $conn->query("SELECT jo.job_order_id, CONCAT('#',LPAD(jo.job_order_id,5,'0'),' - ',c.first_name,' ',c.last_name) AS label
                         FROM job_orders jo JOIN customers c ON jo.customer_id=c.customer_id
                         WHERE jo.status='Completed' ORDER BY jo.date_completed DESC LIMIT 50");
+
 while ($j_res && $r = $j_res->fetch_assoc())
     $job_orders[] = $r;
-
 // pending approvals and active jobs for sidebar badges
 $pa_res = $conn->query("SELECT COUNT(*) AS cnt FROM employee WHERE is_approved=0");
 $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
 $activeJobs_res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status NOT IN ('Completed','Cancelled')");
 $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt'] : 0;
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -727,7 +723,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
 </head>
 
 <body>
-
     <aside class="sidebar">
         <div class="logo">
             <a href="admin_dashboard.php" class="logo-container">
@@ -740,11 +735,10 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                 </div>
             </a>
         </div>
-
         <nav class="nav-section">
             <div class="nav-label">Main</div>
             <a class="nav-item" href="admin_dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a>
-            <a class="nav-item" href="job_orders.php">
+            <a class="nav-item" href="new_job_order.php">
                 <i class="bi bi-clipboard-data"></i> Job Orders
                 <?php if ($activeJobs > 0): ?>
                     <span class="pending-approvals-badge" style="background:var(--accent);"><?= $activeJobs ?></span>
@@ -754,7 +748,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             <a class="nav-item" href="payments.php"><i class="bi bi-credit-card"></i> Payments</a>
             <a class="nav-item" href="products.php"><i class="bi bi-box-seam"></i> Products</a>
         </nav>
-
         <nav class="nav-section">
             <div class="nav-label">Management</div>
             <a class="nav-item" href="customers.php"><i class="bi bi-people"></i> Customers</a>
@@ -771,12 +764,10 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             <a class="nav-item" href="warranties.php"><i class="bi bi-shield-check"></i> Warranties</a>
             <a class="nav-item" href="credit_accounts.php"><i class="bi bi-wallet2"></i> Credit Accounts</a>
         </nav>
-
         <nav class="nav-section">
             <div class="nav-label">Owner</div>
             <a class="nav-item" href="reports.php"><i class="bi bi-bar-chart-line"></i> Reports</a>
         </nav>
-
         <div class="sidebar-footer">
             <div class="user-row">
                 <div class="avatar"><?= $userInitials ?></div>
@@ -792,7 +783,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             </div>
         </div>
     </aside>
-
     <main class="main">
         <header class="topbar">
             <div class="topbar-left">
@@ -808,9 +798,7 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                 </button>
             </div>
         </header>
-
         <div class="content">
-
             <?php if ($successMsg): ?>
                 <div class="page-alert success"><i class="bi bi-check-circle-fill"></i> <?= htmlspecialchars($successMsg) ?>
                 </div>
@@ -818,7 +806,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                 <div class="page-alert error"><i class="bi bi-exclamation-triangle-fill"></i>
                     <?= htmlspecialchars($errorMsg) ?></div>
             <?php endif; ?>
-
             <div class="sales-stats">
                 <div class="stat-card featured">
                     <div class="stat-label">Total Revenue</div>
@@ -842,7 +829,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                     <div class="stat-change">Payments received today</div>
                 </div>
             </div>
-
             <div class="toolbar">
                 <form method="GET" style="display:contents;">
                     <div class="search-box">
@@ -866,7 +852,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                     <?php endif; ?>
                 </form>
             </div>
-
             <!-- sales table -->
             <div class="table-card">
                 <table>
@@ -932,9 +917,17 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                                     <td><span class="badge <?= $badge_class ?>"><?= htmlspecialchars($sale['status']) ?></span>
                                     </td>
                                     <td onclick="event.stopPropagation()">
-                                        <button class="btn-pay"
-                                            onclick="openPaymentModal(<?= $sale['sales_id'] ?>, <?= $sale['final_amount'] ?>, <?= $paid ?>)"><i
-                                                class="bi bi-cash-coin"></i> Pay</button>
+                                        <?php if ($sale['status'] === 'Paid'): ?>
+                                            <button class="btn-pay" disabled
+                                                style="opacity:0.4; cursor:not-allowed; background:#e5e7eb; color:#6b7280; border-color:#e5e7eb;">
+                                                <i class="bi bi-check-circle"></i> Paid
+                                            </button>
+                                        <?php else: ?>
+                                            <button class="btn-pay"
+                                                onclick="openPaymentModal(<?= $sale['sales_id'] ?>, <?= $sale['final_amount'] ?>, <?= $paid ?>)">
+                                                <i class="bi bi-cash-coin"></i> Pay
+                                            </button>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -942,11 +935,8 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                     </tbody>
                 </table>
             </div>
-
         </div>
     </main>
-
-
     <!-- new sale modal -->
     <div class="modal-overlay" id="newSaleModal">
         <div class="modal" style="width:760px;">
@@ -977,7 +967,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                             </select>
                         </div>
                     </div>
-
                     <div
                         style="font-size:12px; font-weight:600; color:#444; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px;">
                         Line Items
@@ -994,13 +983,11 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                             </tr>
                         </thead>
                         <tbody id="itemsBody">
-
                         </tbody>
                     </table>
                     <button type="button" class="btn-add-item" onclick="addItemRow()">
                         <i class="bi bi-plus-circle"></i> Add Item
                     </button>
-
                     <div class="total-row">
                         <span>Discount (₱):</span>
                         <input type="number" name="discount" id="discountInput" value="0" min="0" step="0.01"
@@ -1017,8 +1004,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             </form>
         </div>
     </div>
-
-
     <!-- payment modal -->
     <div class="modal-overlay" id="paymentModal">
         <div class="modal" style="width:460px;">
@@ -1067,7 +1052,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             </form>
         </div>
     </div>
-
     <div class="modal-overlay" id="detailModal">
         <div class="modal" style="width:700px;">
             <div class="modal-header">
@@ -1085,18 +1069,15 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             </div>
         </div>
     </div>
-
     <script>
-        // products data for item selection in new sale modal
+        // pass products data to JS for item selection in new sale modal
         const products = <?= json_encode($products) ?>;
-
         // modal controls
         function openModal(id) { document.getElementById(id).classList.add('open'); }
         function closeModal(id) { document.getElementById(id).classList.remove('open'); }
         document.querySelectorAll('.modal-overlay').forEach(m => {
             m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
         });
-
         // new sale modal 
         let itemIdx = 0;
         function openNewSaleModal() {
@@ -1106,17 +1087,14 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             recalcTotal();
             openModal('newSaleModal');
         }
-
         function addItemRow() {
             const tbody = document.getElementById('itemsBody');
             const idx = itemIdx++;
             const tr = document.createElement('tr');
             tr.id = 'item_row_' + idx;
-
             const productOptions = products.map(p =>
                 `<option value="${p.product_id}" data-price="${p.unit_price}">${p.product_name} (₱${parseFloat(p.unit_price).toFixed(2)})</option>`
             ).join('');
-
             tr.innerHTML = `
         <td>
             <select name="items[${idx}][type]" onchange="toggleItemType(${idx})">
@@ -1138,7 +1116,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
     `;
             tbody.appendChild(tr);
         }
-
         function toggleItemType(idx) {
             const typeEl = document.querySelector(`[name="items[${idx}][type]"]`);
             const cell = document.getElementById('item_desc_cell_' + idx);
@@ -1155,7 +1132,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                           <input type="hidden" name="items[${idx}][description]" id="item_desc_${idx}" value="">`;
             }
         }
-
         function fillPrice(idx) {
             const sel = document.getElementById('item_prod_' + idx);
             const price = sel.options[sel.selectedIndex]?.dataset.price ?? 0;
@@ -1164,13 +1140,11 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             if (descEl) descEl.value = sel.options[sel.selectedIndex]?.text.split(' (₱')[0] ?? '';
             recalcTotal();
         }
-
         function removeItemRow(idx) {
             const row = document.getElementById('item_row_' + idx);
             if (row) row.remove();
             recalcTotal();
         }
-
         function recalcTotal() {
             let total = 0;
             document.querySelectorAll('#itemsBody tr').forEach(tr => {
@@ -1185,7 +1159,6 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             const grand = Math.max(0, total - discount);
             document.getElementById('grandTotal').textContent = '₱' + grand.toFixed(2);
         }
-
         // payment Modal 
         function openPaymentModal(salesId, finalAmt, paid) {
             const balance = Math.max(0, finalAmt - paid);
@@ -1194,13 +1167,44 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             document.getElementById('pay_amount').value = balance.toFixed(2);
             openModal('paymentModal');
         }
-
         // view sale details
         function viewSale(salesId) {
             openModal('detailModal');
             document.getElementById('detailTitle').innerHTML = '<i class="bi bi-receipt"></i>&nbsp; Sale #' + String(salesId).padStart(5, '0');
             document.getElementById('detailBody').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Loading…</div>';
+            // Check if this sale is already paid (from table row badge)
+            const row = document.querySelector(`tr[onclick="viewSale(${salesId})"]`);
+            const statusBadge = row ? row.querySelector('.badge') : null;
+            const isPaid = statusBadge && statusBadge.textContent.trim() === 'Paid';
+            const payBtn = document.getElementById('detailPayBtn');
 
+            if (isPaid) {
+                payBtn.disabled = true;
+                payBtn.style.opacity = '0.4';
+                payBtn.style.cursor = 'not-allowed';
+                payBtn.style.background = '#e5e7eb';
+                payBtn.style.color = '#6b7280';
+                payBtn.innerHTML = '<i class="bi bi-check-circle"></i> Already Paid';
+                payBtn.onclick = null;
+            } else {
+                payBtn.disabled = false;
+                payBtn.style.opacity = '';
+                payBtn.style.cursor = '';
+                payBtn.style.background = '';
+                payBtn.style.color = '';
+                payBtn.innerHTML = 'Record Payment';
+                payBtn.onclick = function () {
+                    closeModal('detailModal');
+                    if (row) {
+                        const cells = row.querySelectorAll('td');
+                        const finalAmt = parseFloat(cells[5].textContent.replace('₱', '').replace(/,/g, ''));
+                        const paid = parseFloat(cells[6].textContent.replace('₱', '').replace(/,/g, ''));
+                        openPaymentModal(salesId, finalAmt, paid);
+                    } else {
+                        openPaymentModal(salesId, 0, 0);
+                    }
+                };
+            }
             fetch('sales_detail.php?id=' + salesId)
                 .then(r => r.text())
                 .then(html => {
@@ -1209,23 +1213,8 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                 .catch(() => {
                     document.getElementById('detailBody').innerHTML = '<p style="color:var(--muted);text-align:center;padding:32px">Could not load details.</p>';
                 });
-
-            document.getElementById('detailPayBtn').onclick = function () {
-                closeModal('detailModal');
-                // fetch the latest amounts from the table row to ensure we have the most up-to-date balance before opening payment modal
-                const row = document.querySelector(`[onclick="viewSale(${salesId})"]`);
-                if (row) {
-                    const cells = row.querySelectorAll('td');
-                    const finalAmt = parseFloat(cells[5].textContent.replace('₱', '').replace(/,/g, ''));
-                    const paid = parseFloat(cells[6].textContent.replace('₱', '').replace(/,/g, ''));
-                    openPaymentModal(salesId, finalAmt, paid);
-                } else {
-                    openPaymentModal(salesId, 0, 0);
-                }
-            };
         }
     </script>
-
 </body>
 
 </html>

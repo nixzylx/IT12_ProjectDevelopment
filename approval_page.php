@@ -32,7 +32,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         <a class="nav-item <?= $currentPage === 'admin_dashboard.php' ? 'active' : '' ?>" href="admin_dashboard.php">
             <i class="bi bi-speedometer2"></i> Dashboard
         </a>
-        <a class="nav-item <?= $currentPage === 'job_orders.php' ? 'active' : '' ?>" href="job_orders.php">
+        <a class="nav-item <?= $currentPage === 'new_job_order.php' ? 'active' : '' ?>" href="new_job_order.php">
             <i class="bi bi-clipboard-data"></i> Job Orders
             <?php if ($activeJobs > 0): ?>
                 <span class="pending-approvals-badge" style="background: var(--accent);"><?= $activeJobs ?></span>
