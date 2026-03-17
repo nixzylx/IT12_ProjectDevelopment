@@ -30,7 +30,7 @@ if ($user['is_approved'] == 0) {
     exit();
 }
 
-// SECURITY CHECK 4: Verify user has owner or business partner role
+// SECURITY CHECK: Verify user has owner or business partner role
 $role = $user['role'];
 if (!in_array(strtolower($role), ['owner', 'business partner'])) {
     die('Access Denied. You do not have permission to view this page. 
@@ -52,13 +52,21 @@ $greeting = ($hourNow < 12) ? 'Good morning' : (($hourNow < 17) ? 'Good afternoo
 // Initialize variables
 $totalRevenue = 0;
 $activeJobs = 0;
+$pendingJobs = 0;
+$ongoingJobs = 0;
 $completedToday = 0;
+$completedThisMonth = 0;
 $activeWarranties = 0;
 $unpaidInvoices = 0;
 $activeJobRows = [];
+$recentCompletedJobs = [];
 $monthlyRevenue = [];
 $creditAccounts = [];
 $pendingApprovals = 0;
+
+// Vehicle statistics
+$totalVehicles = 0;
+$recentVehicles = [];
 
 // Notifications data 
 $notifications = [];
@@ -97,10 +105,10 @@ try {
     }
 } catch (Exception $e) {}
 
-// Active job orders
+// Active job orders notifications
 try {
-    $res = $conn->query("SELECT jo.new_job_order_id, CONCAT(c.first_name,' ',c.last_name) AS customer, jo.status, jo.date_received
-                         FROM new_job_order jo JOIN customers c ON jo.customer_id = c.customer_id
+    $res = $conn->query("SELECT jo.job_order_id, CONCAT(c.first_name,' ',c.last_name) AS customer, jo.status, jo.date_received
+                         FROM job_orders jo JOIN customers c ON jo.customer_id = c.customer_id
                          WHERE jo.status IN ('Pending','Ongoing') ORDER BY jo.date_received DESC LIMIT 3");
     while ($res && $row = $res->fetch_assoc()) {
         $notifications[] = [
@@ -110,7 +118,26 @@ try {
             'title'   => 'Active Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT),
             'message' => htmlspecialchars($row['customer']) . ' — ' . htmlspecialchars($row['status']),
             'time'    => $row['date_received'],
-            'link'    => 'new_job_order.php',
+            'link'    => 'job_orders.php?view=' . $row['job_order_id'],
+        ];
+    }
+} catch (Exception $e) {}
+
+// Completed jobs today notifications
+try {
+    $res = $conn->query("SELECT jo.job_order_id, CONCAT(c.first_name,' ',c.last_name) AS customer, jo.date_completed
+                         FROM job_orders jo JOIN customers c ON jo.customer_id = c.customer_id
+                         WHERE jo.status = 'Completed' AND DATE(jo.date_completed) = CURDATE()
+                         ORDER BY jo.date_completed DESC LIMIT 2");
+    while ($res && $row = $res->fetch_assoc()) {
+        $notifications[] = [
+            'type'    => 'completed',
+            'icon'    => 'bi-check-circle-fill',
+            'color'   => '#10b981',
+            'title'   => 'Job Completed Today',
+            'message' => 'Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT) . ' - ' . htmlspecialchars($row['customer']),
+            'time'    => $row['date_completed'],
+            'link'    => 'job_orders.php?view=' . $row['job_order_id'],
         ];
     }
 } catch (Exception $e) {}
@@ -123,7 +150,7 @@ $notifCount = count($notifications);
 // Fetch dashboard data with error handling
 if (isset($conn) && $conn) {
 
-    // Total Revenue - with error handling
+    // Total Revenue
     try {
         $res = $conn->query("SELECT COALESCE(SUM(amount_paid), 0) AS total FROM payments");
         if ($res && $row = $res->fetch_assoc()) {
@@ -134,9 +161,9 @@ if (isset($conn) && $conn) {
         error_log("Revenue query failed: " . $e->getMessage());
     }
 
-    // Active Jobs
+    // Active Jobs (Pending + Ongoing)
     try {
-        $res = $conn->query("SELECT COUNT(*) AS cnt FROM new_job_order WHERE status != 'Completed' AND status != 'Cancelled'");
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status IN ('Pending', 'Ongoing')");
         if ($res && $row = $res->fetch_assoc()) {
             $activeJobs = $row['cnt'];
         }
@@ -144,14 +171,44 @@ if (isset($conn) && $conn) {
         $activeJobs = 0;
     }
 
+    // Pending Jobs
+    try {
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status = 'Pending'");
+        if ($res && $row = $res->fetch_assoc()) {
+            $pendingJobs = $row['cnt'];
+        }
+    } catch (Exception $e) {
+        $pendingJobs = 0;
+    }
+
+    // Ongoing Jobs
+    try {
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status = 'Ongoing'");
+        if ($res && $row = $res->fetch_assoc()) {
+            $ongoingJobs = $row['cnt'];
+        }
+    } catch (Exception $e) {
+        $ongoingJobs = 0;
+    }
+
     // Completed Today
     try {
-        $res = $conn->query("SELECT COUNT(*) AS cnt FROM new_job_order WHERE status = 'Completed' AND DATE(date_completed) = CURDATE()");
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status = 'Completed' AND DATE(date_completed) = CURDATE()");
         if ($res && $row = $res->fetch_assoc()) {
             $completedToday = $row['cnt'];
         }
     } catch (Exception $e) {
         $completedToday = 0;
+    }
+
+    // Completed This Month
+    try {
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status = 'Completed' AND MONTH(date_completed) = MONTH(CURDATE()) AND YEAR(date_completed) = YEAR(CURDATE())");
+        if ($res && $row = $res->fetch_assoc()) {
+            $completedThisMonth = $row['cnt'];
+        }
+    } catch (Exception $e) {
+        $completedThisMonth = 0;
     }
 
     // Active Warranties
@@ -174,25 +231,82 @@ if (isset($conn) && $conn) {
         $unpaidInvoices = 0;
     }
 
-    // Active jobs table
+    // Total Vehicles
+    try {
+        $res = $conn->query("SELECT COUNT(*) AS cnt FROM vehicles");
+        if ($res && $row = $res->fetch_assoc()) {
+            $totalVehicles = $row['cnt'];
+        }
+    } catch (Exception $e) {
+        $totalVehicles = 0;
+    }
+
+    // Recent Vehicles (for quick view)
+    try {
+        $res = $conn->query("
+            SELECT v.*, CONCAT(c.first_name, ' ', c.last_name) AS owner_name
+            FROM vehicles v
+            LEFT JOIN customers c ON v.customer_id = c.customer_id
+            ORDER BY v.vehicle_id DESC
+            LIMIT 5
+        ");
+        while ($res && $row = $res->fetch_assoc()) {
+            $recentVehicles[] = $row;
+        }
+    } catch (Exception $e) {
+        $recentVehicles = [];
+    }
+
+    // Active jobs table (Pending and Ongoing) - REMOVED PRIORITY
     try {
         $res = $conn->query("
             SELECT jo.job_order_id, 
                    CONCAT(c.first_name, ' ', c.last_name) AS customer,
-                   CONCAT(v.brand, ' ', v.model) AS vehicle,
+                   CONCAT(v.brand, ' ', v.model, ' (', v.plate_number, ')') AS vehicle,
                    jo.job_description AS service,
-                   jo.status
-            FROM new_job_order jo
+                   jo.status,
+                   jo.date_received,
+                   CONCAT(e.first_name, ' ', e.last_name) AS mechanic
+            FROM job_orders jo
             LEFT JOIN customers c ON jo.customer_id = c.customer_id
             LEFT JOIN vehicles v ON jo.vehicle_id = v.vehicle_id
-            WHERE jo.status != 'Completed' AND jo.status != 'Cancelled'
-            ORDER BY jo.date_received DESC LIMIT 10
+            LEFT JOIN employee e ON jo.assigned_mechanic = e.employeeID
+            WHERE jo.status IN ('Pending', 'Ongoing')
+            ORDER BY 
+                CASE jo.status
+                    WHEN 'Pending' THEN 1
+                    WHEN 'Ongoing' THEN 2
+                END,
+                jo.date_received DESC 
+            LIMIT 10
         ");
         while ($res && $row = $res->fetch_assoc()) {
             $activeJobRows[] = $row;
         }
     } catch (Exception $e) {
         $activeJobRows = [];
+    }
+
+    // Recent completed jobs
+    try {
+        $res = $conn->query("
+            SELECT jo.job_order_id, 
+                   CONCAT(c.first_name, ' ', c.last_name) AS customer,
+                   CONCAT(v.brand, ' ', v.model) AS vehicle,
+                   jo.job_description AS service,
+                   jo.date_completed
+            FROM job_orders jo
+            LEFT JOIN customers c ON jo.customer_id = c.customer_id
+            LEFT JOIN vehicles v ON jo.vehicle_id = v.vehicle_id
+            WHERE jo.status = 'Completed'
+            ORDER BY jo.date_completed DESC 
+            LIMIT 5
+        ");
+        while ($res && $row = $res->fetch_assoc()) {
+            $recentCompletedJobs[] = $row;
+        }
+    } catch (Exception $e) {
+        $recentCompletedJobs = [];
     }
 
     // Monthly revenue chart
@@ -217,18 +331,46 @@ if (isset($conn) && $conn) {
         $res = $conn->query("
             SELECT c.first_name, c.last_name, 
                    ca.current_balance as balance, 
-                   ca.credit_limit
+                   ca.credit_limit,
+                   ca.due_date
             FROM credit_accounts ca
             JOIN customers c ON ca.customer_id = c.customer_id
             WHERE ca.current_balance > 0
             ORDER BY ca.current_balance DESC LIMIT 5
         ");
         while ($res && $row = $res->fetch_assoc()) {
+            if (isset($row['due_date'])) {
+                $due_date = new DateTime($row['due_date']);
+                $today = new DateTime();
+                $interval = $today->diff($due_date);
+                $row['days_until_due'] = $due_date > $today ? $interval->days : -$interval->days;
+            }
             $creditAccounts[] = $row;
         }
     } catch (Exception $e) {
         $creditAccounts = [];
     }
+    
+    // Pending approvals count
+    try {
+        $pa_res = $conn->query("SELECT COUNT(*) AS cnt FROM employee WHERE is_approved = 0");
+        if ($pa_res && $r = $pa_res->fetch_assoc()) {
+            $pendingApprovals = $r['cnt'];
+        }
+    } catch (Exception $e) {
+        $pendingApprovals = 0;
+    }
+}
+
+// Vehicles added this month
+$newVehiclesThisMonth = 0;
+try {
+    $nm_res = $conn->query("SELECT COUNT(*) AS cnt FROM vehicles WHERE MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())");
+    if ($nm_res && $nm_row = $nm_res->fetch_assoc()) {
+        $newVehiclesThisMonth = $nm_row['cnt'];
+    }
+} catch (Exception $e) {
+    $newVehiclesThisMonth = 0;
 }
 
 // Prepare user data for display
@@ -243,18 +385,16 @@ $isOwner = strtolower($role) === 'owner';
 <html lang="en">
 
 <head>
-
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AutoBert — Admin Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
-        
         .notif-count {
             position: absolute;
             top: -6px; right: -6px;
-            background: var(--red);
+            background: #ef4444;
             color: #fff;
             border-radius: 50%;
             width: 18px; height: 18px;
@@ -362,6 +502,437 @@ $isOwner = strtolower($role) === 'owner';
         
         .notif-panel-footer a:hover { text-decoration: underline; }
         .topbar { position: relative; }
+        
+        .stat-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        /* Vehicle Mini List */
+        .vehicle-mini-list {
+            margin-top: 16px;
+        }
+        
+        .vehicle-mini-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-bottom: 1px solid #f3f4f6;
+            transition: background 0.15s;
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        .vehicle-mini-item:hover {
+            background: #f9fafb;
+        }
+        
+        .vehicle-mini-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .vehicle-mini-name {
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        .vehicle-mini-plate {
+            font-size: 11px;
+            color: var(--accent);
+        }
+        
+        .vehicle-mini-owner {
+            font-size: 11px;
+            color: var(--muted);
+        }
+        
+        .vehicle-mini-link {
+            color: var(--accent);
+            font-size: 12px;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: #fff;
+            border-radius: var(--card-radius);
+            padding: 20px;
+            border: 1px solid var(--border);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card.featured {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+        }
+        
+        .stat-card.featured .stat-label,
+        .stat-card.featured .stat-change {
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .stat-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        
+        .stat-value {
+            font-family: 'Syne', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .stat-change {
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .stat-change.up { color: #10b981; }
+        .stat-change.down { color: #ef4444; }
+        
+        /* Stats Subgrid */
+        .stats-subgrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card.small {
+            padding: 16px;
+        }
+        
+        .stat-card.small .stat-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-card.small .stat-label {
+            font-size: 11px;
+        }
+        
+        .stat-card.small .stat-value {
+            font-size: 22px;
+            margin-bottom: 4px;
+        }
+        
+        /* Bottom Grid */
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .row-bottom {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        
+        .card {
+            background: #fff;
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .card-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+        }
+        
+        .card-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        
+        .card-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .job-table {
+            width: 100%;
+        }
+        
+        .job-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 600;
+            background: #f9fafb;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .job-table td {
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .job-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .job-table tbody tr {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        
+        .job-table tbody tr:hover {
+            background: #f9fafb;
+        }
+        
+        .job-id {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-ongoing { background: #dbeafe; color: #1e40af; }
+        .status-completed { background: #dcfce7; color: #166534; }
+        
+        .vehicle-info {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        .mechanic-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .mechanic-avatar {
+            width: 22px;
+            height: 22px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+        
+        .empty-text {
+            color: var(--muted);
+            font-size: 14px;
+        }
+        
+        /* Credit List */
+        .credit-list {
+            padding: 8px 0;
+        }
+        
+        .credit-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .credit-row:last-child {
+            border-bottom: none;
+        }
+        
+        .credit-name {
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        .credit-limit {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        
+        .credit-amount {
+            font-weight: 700;
+            font-size: 14px;
+        }
+        
+        .credit-amount.owed { color: #dc2626; }
+        
+        .overdue { color: #dc2626; }
+        .due-soon { color: #f97316; }
+        
+        /* Chart */
+        .mini-chart {
+            padding: 20px;
+        }
+        
+        .chart-bars {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            height: 120px;
+            margin-top: 20px;
+        }
+        
+        .bar-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 40px;
+        }
+        
+        .bar {
+            width: 30px;
+            background: #e2e8f0;
+            border-radius: 6px 6px 0 0;
+            transition: height 0.3s;
+        }
+        
+        .bar.active {
+            background: var(--accent);
+        }
+        
+        .bar-label {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 8px;
+        }
+        
+        /* Quick Actions */
+        .qa-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            padding: 20px;
+        }
+        
+        .qa-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 8px;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+        
+        .qa-btn:hover {
+            background: #fff;
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        
+        .qa-icon {
+            font-size: 24px;
+        }
+        
+        .qa-btn span {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        
+        /* Greeting */
+        .greeting {
+            margin-bottom: 24px;
+        }
+        
+        .greeting h1 {
+            font-family: 'Syne', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        
+        .greeting p {
+            color: var(--muted);
+            font-size: 14px;
+        }
+        
+        @media (max-width: 1200px) {
+            .bottom-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .row-bottom {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .stats-subgrid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
@@ -384,7 +955,7 @@ $isOwner = strtolower($role) === 'owner';
             <a class="nav-item active" href="admin_dashboard.php">
                 <i class="bi bi-speedometer2"></i> Dashboard
             </a>
-            <a class="nav-item" href="new_job_order.php">
+            <a class="nav-item" href="job_orders.php">
                 <i class="bi bi-clipboard-data"></i> Job Orders
                 <?php if ($activeJobs > 0): ?>
                     <span class="pending-approvals-badge" style="background: var(--accent);"><?= $activeJobs ?></span>
@@ -408,6 +979,9 @@ $isOwner = strtolower($role) === 'owner';
             </a>
             <a class="nav-item" href="vehicles.php">
                 <i class="bi bi-truck"></i> Vehicles
+                <?php if ($totalVehicles > 0): ?>
+                    <span class="pending-approvals-badge" style="background: #10b981;"><?= $totalVehicles ?></span>
+                <?php endif; ?>
             </a>
             <?php if ($isOwner): ?>
                 <a class="nav-item" href="employees.php">
@@ -428,25 +1002,23 @@ $isOwner = strtolower($role) === 'owner';
             </a>
         </nav>
 
+        <?php if ($isOwner): ?>
         <nav class="nav-section">
             <div class="nav-label">Owner</div>
             <a class="nav-item" href="reports.php">
                 <i class="bi bi-bar-chart-line"></i> Reports
             </a>
         </nav>
+        <?php endif; ?>
 
         <div class="sidebar-footer">
-            <div class="user-row" onclick="toggleUserMenu()">
+            <div class="user-row">
                 <div class="avatar"><?= $userInitials ?></div>
                 <div>
                     <div class="user-name"><?= $firstname ?></div>
                     <div class="user-role"><?= $userRoleLabel ?></div>
                 </div>
-                <div class="user-more">
-                    <i class="bi bi-three-dots"></i>
-                </div>
             </div>
-            <!-- Simple logout option -->
             <div style="margin-top: 10px; text-align: center;">
                 <a href="logout.php" style="color: var(--sidebar-text); text-decoration: none; font-size: 12px;">
                     <i class="bi bi-box-arrow-right"></i> Logout
@@ -472,7 +1044,6 @@ $isOwner = strtolower($role) === 'owner';
                 <div class="icon-btn notif-trigger" onclick="toggleNotifPanel()" id="notifBtn" style="position:relative;">
                     <i class="bi bi-bell"></i>
                     <?php if ($notifCount > 0): ?>
-                        <div class="notif-dot"></div>
                         <span class="notif-count"><?= $notifCount ?></span>
                     <?php endif; ?>
                 </div>
@@ -522,7 +1093,7 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                     <?php endif; ?>
                 </div>
-                <button class="btn-primary" onclick="window.location.href='new_job_order.php'">
+                <button class="btn-primary" onclick="window.location.href='job_orders.php'">
                     <i class="bi bi-plus-lg"></i> New Job Order
                 </button>
                 <button class="logout-btn" onclick="window.location.href='logout.php'">
@@ -537,7 +1108,7 @@ $isOwner = strtolower($role) === 'owner';
                 <p><?= $todayLabel ?></p>
             </div>
 
-            <!-- Stats Grid -->
+            <!-- Main Stats Grid -->
             <div class="stats-grid">
                 <a href="reports.php?report=revenue" class="stat-link">
                     <div class="stat-card featured">
@@ -550,18 +1121,29 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="new_job_order.php?status=active" class="stat-link">
+                <a href="job_orders.php?status=pending" class="stat-link">
                     <div class="stat-card">
-                        <div class="stat-icon">🔧</div>
-                        <div class="stat-label">Active Jobs</div>
-                        <div class="stat-value"><?= $activeJobs ?></div>
-                        <div class="stat-change <?= $activeJobs > 0 ? 'up' : 'neutral' ?>">
-                            <?= $activeJobs ?> jobs in progress
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-label">Pending Jobs</div>
+                        <div class="stat-value"><?= $pendingJobs ?></div>
+                        <div class="stat-change <?= $pendingJobs > 0 ? 'up' : 'neutral' ?>">
+                            <?= $pendingJobs ?> waiting to start
                         </div>
                     </div>
                 </a>
 
-                <a href="new_job_order.php?status=completed&date=today" class="stat-link">
+                <a href="job_orders.php?status=ongoing" class="stat-link">
+                    <div class="stat-card">
+                        <div class="stat-icon">🔧</div>
+                        <div class="stat-label">Ongoing Jobs</div>
+                        <div class="stat-value"><?= $ongoingJobs ?></div>
+                        <div class="stat-change <?= $ongoingJobs > 0 ? 'up' : 'neutral' ?>">
+                            <?= $ongoingJobs ?> in progress
+                        </div>
+                    </div>
+                </a>
+
+                <a href="job_orders.php?status=completed&date=today" class="stat-link">
                     <div class="stat-card">
                         <div class="stat-icon">✅</div>
                         <div class="stat-label">Completed Today</div>
@@ -572,19 +1154,55 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="warranties.php" class="stat-link">
+                <a href="job_orders.php?status=completed&month=current" class="stat-link">
                     <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-label">Completed This Month</div>
+                        <div class="stat-value"><?= $completedThisMonth ?></div>
+                        <div class="stat-change">
+                            <i class="bi bi-calendar"></i> This month
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Vehicle Statistics Section -->
+            <div class="stats-subgrid">
+                <a href="vehicles.php" class="stat-link">
+                    <div class="stat-card small">
+                        <div class="stat-icon">🚗</div>
+                        <div class="stat-label">Total Vehicles</div>
+                        <div class="stat-value"><?= $totalVehicles ?></div>
+                        <div class="stat-change">
+                            <i class="bi bi-truck"></i> Registered in system
+                        </div>
+                    </div>
+                </a>
+                
+                <a href="vehicles.php?new=this-month" class="stat-link">
+                    <div class="stat-card small">
+                        <div class="stat-icon">📝</div>
+                        <div class="stat-label">New Vehicles</div>
+                        <div class="stat-value"><?= $newVehiclesThisMonth ?></div>
+                        <div class="stat-change">
+                            <i class="bi bi-calendar"></i> Added this month
+                        </div>
+                    </div>
+                </a>
+
+                <a href="warranties.php" class="stat-link">
+                    <div class="stat-card small">
                         <div class="stat-icon">🛡️</div>
                         <div class="stat-label">Active Warranties</div>
                         <div class="stat-value"><?= $activeWarranties ?></div>
                         <div class="stat-change">
-                            <?= $activeWarranties ?> active warranties
+                            <i class="bi bi-shield-check"></i> Active warranties
                         </div>
                     </div>
                 </a>
 
                 <a href="sales.php?status=unpaid" class="stat-link">
-                    <div class="stat-card">
+                    <div class="stat-card small">
                         <div class="stat-icon">⚠️</div>
                         <div class="stat-label">Unpaid Invoices</div>
                         <div class="stat-value"><?= $unpaidInvoices ?></div>
@@ -597,14 +1215,14 @@ $isOwner = strtolower($role) === 'owner';
 
             <!-- Bottom Grid -->
             <div class="bottom-grid">
-                <!-- Active Jobs Table -->
+                <!-- Active Jobs Table (Pending and Ongoing) -->
                 <div class="card">
                     <div class="card-header">
                         <div>
                             <div class="card-title">Active Job Orders</div>
-                            <div class="card-sub">Currently in progress</div>
+                            <div class="card-sub">Pending and ongoing jobs</div>
                         </div>
-                        <a class="card-link" href="new_job_order.php">View all →</a>
+                        <a class="card-link" href="job_orders.php">View all →</a>
                     </div>
 
                     <table class="job-table">
@@ -615,12 +1233,13 @@ $isOwner = strtolower($role) === 'owner';
                                 <th>Service</th>
                                 <th>Mechanic</th>
                                 <th>Status</th>
+                                <th>Date Received</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($activeJobRows)): ?>
                                 <tr>
-                                    <td colspan="5">
+                                    <td colspan="6">
                                         <div class="empty-state">
                                             <div class="empty-icon">🔧</div>
                                             <div class="empty-text">No active job orders</div>
@@ -629,11 +1248,9 @@ $isOwner = strtolower($role) === 'owner';
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($activeJobRows as $job): ?>
-                                    <tr onclick="window.location.href='job_details.php?id=<?= $job['job_order_id'] ?>'"
-                                        style="cursor: pointer;">
+                                    <tr onclick="window.location.href='job_orders.php?view=<?= $job['job_order_id'] ?>'">
                                         <td>
-                                            <span
-                                                class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
+                                            <span class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
                                         </td>
                                         <td>
                                             <div><?= htmlspecialchars($job['customer']) ?></div>
@@ -654,11 +1271,11 @@ $isOwner = strtolower($role) === 'owner';
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <span
-                                                class="status-badge status-<?= strtolower(str_replace(' ', '-', $job['status'])) ?>">
+                                            <span class="status-badge status-<?= strtolower($job['status']) ?>">
                                                 <?= htmlspecialchars($job['status']) ?>
                                             </span>
                                         </td>
+                                        <td><?= date('M d, Y', strtotime($job['date_received'])) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -666,36 +1283,51 @@ $isOwner = strtolower($role) === 'owner';
                     </table>
                 </div>
 
-                <!-- Quick Actions -->
+                <!-- Recent Vehicles Card -->
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">Quick Actions</div>
+                        <div>
+                            <div class="card-title">Recent Vehicles</div>
+                            <div class="card-sub">Latest registered vehicles</div>
+                        </div>
+                        <a class="card-link" href="vehicles.php">View all →</a>
                     </div>
-                    <div class="qa-grid">
-                        <button class="qa-btn" onclick="window.location.href='new_job_order.php'">
-                            <div class="qa-icon">📋</div>
-                            New Job Order
-                        </button>
-                        <button class="qa-btn" onclick="window.location.href='payments.php'">
-                            <div class="qa-icon">💳</div>
-                            Record Payment
-                        </button>
-                        <button class="qa-btn" onclick="window.location.href='add_customer.php'">
-                            <div class="qa-icon">👤</div>
-                            Add Customer
-                        </button>
-                        <button class="qa-btn" onclick="window.location.href='add_vehicle.php'">
-                            <div class="qa-icon">🚗</div>
-                            Add Vehicle
-                        </button>
-                        <button class="qa-btn" onclick="window.location.href='products.php?action=add'">
-                            <div class="qa-icon">📦</div>
-                            Add Product
-                        </button>
-                        <button class="qa-btn" onclick="window.location.href='create_invoice.php'">
-                            <div class="qa-icon">📄</div>
-                            Create Invoice
-                        </button>
+                    
+                    <div class="vehicle-mini-list">
+                        <?php if (empty($recentVehicles)): ?>
+                            <div class="empty-state" style="padding: 32px;">
+                                <div class="empty-icon">🚗</div>
+                                <div class="empty-text">No vehicles registered yet</div>
+                                <button class="btn-primary" style="margin-top: 16px;" onclick="window.location.href='vehicles.php'">
+                                    Register Vehicle
+                                </button>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach ($recentVehicles as $vehicle): ?>
+                                <a href="vehicles.php?view=<?= $vehicle['vehicle_id'] ?>" class="vehicle-mini-item">
+                                    <div class="vehicle-mini-info">
+                                        <span class="vehicle-mini-name">
+                                            <?= htmlspecialchars($vehicle['brand'] . ' ' . $vehicle['model']) ?>
+                                        </span>
+                                        <span class="vehicle-mini-plate">
+                                            <i class="bi bi-upc-scan"></i> <?= htmlspecialchars($vehicle['plate_number']) ?>
+                                        </span>
+                                        <span class="vehicle-mini-owner">
+                                            <i class="bi bi-person-circle"></i> <?= htmlspecialchars($vehicle['owner_name'] ?? 'Unknown') ?>
+                                        </span>
+                                    </div>
+                                    <div class="vehicle-mini-link">
+                                        <i class="bi bi-arrow-right"></i>
+                                    </div>
+                                </a>
+                            <?php endforeach; ?>
+                            
+                            <div style="padding: 12px; text-align: center; border-top: 1px solid var(--border); margin-top: 8px;">
+                                <a href="vehicles.php" style="color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 600;">
+                                    Manage All Vehicles <i class="bi bi-arrow-right"></i>
+                                </a>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -712,8 +1344,7 @@ $isOwner = strtolower($role) === 'owner';
                         <a class="card-link" href="reports.php">Full Report →</a>
                     </div>
                     <div class="mini-chart">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
                             <div>
                                 <div style="font-family:'Syne',sans-serif; font-size: 24px; font-weight: 700;">
                                     ₱<?= number_format($totalRevenue, 2) ?>
@@ -750,77 +1381,81 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </div>
 
-                <!-- Credit Accounts -->
+                <!-- Recent Completed Jobs -->
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <div class="card-title">Credit Accounts</div>
-                            <div class="card-sub">Outstanding balances</div>
+                            <div class="card-title">Recently Completed</div>
+                            <div class="card-sub">Latest finished jobs</div>
                         </div>
-                        <a class="card-link" href="credit_accounts.php">Manage →</a>
+                        <a class="card-link" href="job_orders.php?status=completed">View all →</a>
                     </div>
-                    <div class="credit-list">
-                        <?php if (empty($creditAccounts)): ?>
-                            <div class="empty-state" style="padding: 32px 0;">
-                                <div class="empty-icon">💳</div>
-                                <div class="empty-text">No credit accounts with balance</div>
+                    
+                    <div class="vehicle-mini-list">
+                        <?php if (empty($recentCompletedJobs)): ?>
+                            <div class="empty-state" style="padding: 32px;">
+                                <div class="empty-icon">✅</div>
+                                <div class="empty-text">No completed jobs yet</div>
                             </div>
                         <?php else: ?>
-                            <?php foreach ($creditAccounts as $ca):
-                                $balance = floatval($ca['current_balance']);
-                                $limit = floatval($ca['credit_limit']);
-                                $usage_percent = $limit > 0 ? ($balance / $limit) * 100 : 0;
-                                $days_until_due = $ca['days_until_due'] ?? 30;
-                                $due_class = $days_until_due < 0 ? 'overdue' : ($days_until_due < 7 ? 'due-soon' : '');
-                                ?>
-                                <div class="credit-row">
-                                    <div>
-                                        <div class="credit-name">
-                                            <?= htmlspecialchars($ca['first_name'] . ' ' . $ca['last_name']) ?>
-                                        </div>
-                                        <div class="credit-limit">
-                                            Limit: ₱<?= number_format($limit, 2) ?>
-                                            <span style="margin-left: 8px; font-size: 10px;">
-                                                <?= number_format($usage_percent, 1) ?>% used
-                                            </span>
-                                        </div>
+                            <?php foreach ($recentCompletedJobs as $job): ?>
+                                <a href="job_orders.php?view=<?= $job['job_order_id'] ?>" class="vehicle-mini-item">
+                                    <div class="vehicle-mini-info">
+                                        <span class="vehicle-mini-name">
+                                            #<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?> - <?= htmlspecialchars($job['customer']) ?>
+                                        </span>
+                                        <span class="vehicle-mini-plate">
+                                            <i class="bi bi-truck"></i> <?= htmlspecialchars($job['vehicle']) ?>
+                                        </span>
+                                        <span class="vehicle-mini-owner">
+                                            <i class="bi bi-clock"></i> <?= date('M d, Y', strtotime($job['date_completed'])) ?>
+                                        </span>
                                     </div>
-                                    <div>
-                                        <div class="credit-amount <?= $balance > 0 ? 'owed' : 'credit' ?>">
-                                            ₱<?= number_format($balance, 2) ?>
-                                        </div>
-                                        <?php if (isset($ca['due_date'])): ?>
-                                            <div class="<?= $due_class ?>" style="font-size: 10px; text-align: right;">
-                                                <?php if ($days_until_due < 0): ?>
-                                                    Overdue by <?= abs($days_until_due) ?> days
-                                                <?php elseif ($days_until_due == 0): ?>
-                                                    Due today
-                                                <?php else: ?>
-                                                    <?= $days_until_due ?> days left
-                                                <?php endif; ?>
-                                            </div>
-                                        <?php endif; ?>
+                                    <div class="vehicle-mini-link">
+                                        <i class="bi bi-arrow-right"></i>
                                     </div>
-                                </div>
+                                </a>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
+
+            <!-- Quick Actions -->
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header">
+                    <div class="card-title">Quick Actions</div>
+                </div>
+                <div class="qa-grid">
+                    <button class="qa-btn" onclick="window.location.href='job_orders.php'">
+                        <div class="qa-icon">📋</div>
+                        <span>New Job Order</span>
+                    </button>
+                    <button class="qa-btn" onclick="window.location.href='payments.php'">
+                        <div class="qa-icon">💳</div>
+                        <span>Record Payment</span>
+                    </button>
+                    <button class="qa-btn" onclick="window.location.href='customers.php?action=add'">
+                        <div class="qa-icon">👤</div>
+                        <span>Add Customer</span>
+                    </button>
+                    <button class="qa-btn" onclick="window.location.href='vehicles.php?action=add'">
+                        <div class="qa-icon">🚗</div>
+                        <span>Add Vehicle</span>
+                    </button>
+                    <button class="qa-btn" onclick="window.location.href='products.php?action=add'">
+                        <div class="qa-icon">📦</div>
+                        <span>Add Product</span>
+                    </button>
+                    <button class="qa-btn" onclick="window.location.href='sales.php?action=create'">
+                        <div class="qa-icon">📄</div>
+                        <span>Create Invoice</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </main>
 
-    <script>
-        function toggleUserMenu() {
-            // You can implement a dropdown menu here
-            console.log('User menu clicked');
-        }
-
-        // Auto-refresh data every 5 minutes (300000 ms)
-        setTimeout(function () {
-            location.reload();
-        }, 300000);
-    </script>
     <script>
         function toggleNotifPanel() {
             const panel = document.getElementById('notifPanel');
@@ -835,6 +1470,11 @@ $isOwner = strtolower($role) === 'owner';
                 panel.classList.remove('open');
             }
         });
+
+        // Auto-refresh data every 5 minutes (300000 ms)
+        setTimeout(function () {
+            location.reload();
+        }, 300000);
     </script>
 </body>
 

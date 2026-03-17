@@ -34,7 +34,7 @@ while ($c_res && $row = $c_res->fetch_assoc()) {
     $customers[] = $row;
 }
 
-// Get vehicles for dropdown (will be filtered by customer via AJAX)
+// Get vehicles for dropdown (will be filtered by customer)
 $vehicles = [];
 $v_res = $conn->query("SELECT v.*, CONCAT(c.first_name, ' ', c.last_name) AS owner_name 
                        FROM vehicles v 
@@ -53,26 +53,17 @@ while ($m_res && $row = $m_res->fetch_assoc()) {
     $mechanics[] = $row;
 }
 
-// Service types offered
+// Service types offered - UPDATED to specified services only
 $service_types = [
     'Mechanical Job',
     'Auto Electrical Job',
     'Alternator and Starter Repair',
     'Body Alignment and Painting',
     'Calibration',
-    'Battery Charging',
-    'Radiator Overhaul',
+    'Battery Charging and Radiator Overhaul',
     'Change Oil',
     'Welding Job',
-    'OBD II Scanning',
-    'General Checkup',
-    'Engine Repair',
-    'Transmission Repair',
-    'Aircon Service',
-    'Suspension Repair',
-    'Brake System Repair',
-    'Tire Service',
-    'Diagnostic'
+    'OBD II Scanning'
 ];
 
 // Process new job order
@@ -84,31 +75,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $assigned_mechanic = intval($_POST['assigned_mechanic'] ?? 0);
         $job_description = $conn->real_escape_string($_POST['job_description'] ?? '');
         $service_type = $conn->real_escape_string($_POST['service_type'] ?? '');
-        $labor_fee = floatval($_POST['labor_fee'] ?? 0);
-        $estimated_cost = floatval($_POST['estimated_cost'] ?? 0);
         $notes = $conn->real_escape_string($_POST['notes'] ?? '');
-        $priority = $conn->real_escape_string($_POST['priority'] ?? 'Normal');
-        
-        // Get odometer reading if provided
-        $odometer_reading = intval($_POST['odometer_reading'] ?? 0);
-        $fuel_level = $conn->real_escape_string($_POST['fuel_level'] ?? '');
-        
-        // Customer complaints
         $customer_complaint = $conn->real_escape_string($_POST['customer_complaint'] ?? '');
         
         if ($customer_id && $vehicle_id && $assigned_mechanic && !empty($job_description)) {
             
             $sql = "INSERT INTO job_orders (
                 customer_id, vehicle_id, assigned_mechanic, job_description, service_type, 
-                labor_fee, estimated_cost, notes, priority, odometer_reading, fuel_level, 
-                customer_complaint, status, date_received
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())";
+                notes, customer_complaint, status, date_received
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())";
             
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("iiissddsisss", 
+            $stmt->bind_param("iiissss", 
                 $customer_id, $vehicle_id, $assigned_mechanic, $job_description, $service_type,
-                $labor_fee, $estimated_cost, $notes, $priority, $odometer_reading, $fuel_level,
-                $customer_complaint
+                $notes, $customer_complaint
             );
             
             if ($stmt->execute()) {
@@ -128,56 +108,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $job_order_id = intval($_POST['job_order_id'] ?? 0);
         $new_status = $conn->real_escape_string($_POST['status'] ?? '');
         $repair_notes = $conn->real_escape_string($_POST['repair_notes'] ?? '');
-        $parts_used = $conn->real_escape_string($_POST['parts_used'] ?? '');
-        $actual_cost = floatval($_POST['actual_cost'] ?? 0);
         
         if ($job_order_id && $new_status) {
             
-            $update_sql = "UPDATE job_orders SET status = '$new_status'";
-            
-            // If completed, set date_completed
             if ($new_status === 'Completed') {
-                $update_sql = "UPDATE job_orders SET status = '$new_status', 
-                               date_completed = NOW(), actual_cost = '$actual_cost',
-                               repair_notes = CONCAT(IFNULL(repair_notes, ''), '\\n', '$repair_notes'),
-                               parts_used = CONCAT(IFNULL(parts_used, ''), '\\n', '$parts_used')
-                               WHERE job_order_id = $job_order_id";
+                // When completed, redirect to create transaction
+                $_SESSION['completed_job_id'] = $job_order_id;
+                $_SESSION['completed_job_notes'] = $repair_notes;
+                header("Location: create_transaction.php?job_id=" . $job_order_id);
+                exit();
             } elseif ($new_status === 'Ongoing') {
                 $update_sql = "UPDATE job_orders SET status = '$new_status',
-                               repair_notes = CONCAT(IFNULL(repair_notes, ''), '\\nStarted: ', NOW(), ' - ', '$repair_notes')
+                               repair_notes = CONCAT(IFNULL(repair_notes, ''), '\nStarted: ', NOW(), ' - ', '$repair_notes')
                                WHERE job_order_id = $job_order_id";
+                
+                if ($conn->query($update_sql)) {
+                    $successMsg = "Job Order #" . str_pad($job_order_id, 5, '0', STR_PAD_LEFT) . " status updated to $new_status.";
+                } else {
+                    $errorMsg = "Failed to update status: " . $conn->error;
+                }
             } else {
-                $update_sql .= " WHERE job_order_id = $job_order_id";
+                $update_sql = "UPDATE job_orders SET status = '$new_status' WHERE job_order_id = $job_order_id";
+                
+                if ($conn->query($update_sql)) {
+                    $successMsg = "Job Order #" . str_pad($job_order_id, 5, '0', STR_PAD_LEFT) . " status updated to $new_status.";
+                } else {
+                    $errorMsg = "Failed to update status: " . $conn->error;
+                }
             }
-            
-            if ($conn->query($update_sql)) {
-                $successMsg = "Job Order #" . str_pad($job_order_id, 5, '0', STR_PAD_LEFT) . " status updated to $new_status.";
-            } else {
-                $errorMsg = "Failed to update status: " . $conn->error;
-            }
-        }
-    }
-    
-    // Add repair detail
-    if ($_POST['action'] === 'add_repair_detail') {
-        $job_order_id = intval($_POST['job_order_id'] ?? 0);
-        $detail_description = $conn->real_escape_string($_POST['detail_description'] ?? '');
-        $detail_type = $conn->real_escape_string($_POST['detail_type'] ?? 'Repair');
-        $detail_notes = $conn->real_escape_string($_POST['detail_notes'] ?? '');
-        
-        if ($job_order_id && !empty($detail_description)) {
-            
-            // You might want to create a repair_details table for this
-            // For now, we'll append to repair_notes
-            $detail_entry = "\n[" . date('Y-m-d H:i') . "] $detail_type: $detail_description";
-            if (!empty($detail_notes)) {
-                $detail_entry .= " - Notes: $detail_notes";
-            }
-            
-            $conn->query("UPDATE job_orders SET repair_notes = CONCAT(IFNULL(repair_notes, ''), '$detail_entry') 
-                         WHERE job_order_id = $job_order_id");
-            
-            $successMsg = "Repair detail added successfully.";
         }
     }
 }
@@ -221,12 +179,11 @@ $jo_res = $conn->query("
     LEFT JOIN employee e ON jo.assigned_mechanic = e.employeeID
     WHERE $where_sql
     ORDER BY 
-        CASE jo.priority 
-            WHEN 'Emergency' THEN 1
-            WHEN 'High' THEN 2
-            WHEN 'Normal' THEN 3
-            WHEN 'Low' THEN 4
-            ELSE 5
+        CASE jo.status
+            WHEN 'Pending' THEN 1
+            WHEN 'Ongoing' THEN 2
+            WHEN 'Completed' THEN 3
+            ELSE 4
         END,
         jo.date_received DESC
     LIMIT 100
@@ -457,19 +414,6 @@ if (isset($_GET['view'])) {
             color: var(--accent);
         }
         
-        .priority-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        
-        .priority-emergency { background: #fee2e2; color: #991b1b; }
-        .priority-high { background: #ffedd5; color: #9a3412; }
-        .priority-normal { background: #e0f2fe; color: #0369a1; }
-        .priority-low { background: #f3e8ff; color: #6b21a8; }
-        
         .status-badge {
             display: inline-block;
             padding: 4px 12px;
@@ -554,10 +498,6 @@ if (isset($_GET['view'])) {
             margin-bottom: 16px;
         }
         
-        .form-row.three-col {
-            grid-template-columns: 1fr 1fr 1fr;
-        }
-        
         .form-group {
             display: flex;
             flex-direction: column;
@@ -617,49 +557,6 @@ if (isset($_GET['view'])) {
             border: 1px solid var(--border);
         }
         
-        .timeline {
-            position: relative;
-            padding-left: 30px;
-        }
-        
-        .timeline-item {
-            position: relative;
-            padding-bottom: 20px;
-        }
-        
-        .timeline-item:before {
-            content: '';
-            position: absolute;
-            left: -22px;
-            top: 0;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: var(--accent);
-        }
-        
-        .timeline-item:after {
-            content: '';
-            position: absolute;
-            left: -17px;
-            top: 12px;
-            width: 2px;
-            height: calc(100% - 12px);
-            background: #e2e8f0;
-        }
-        
-        .timeline-item:last-child:after { display: none; }
-        
-        .timeline-date {
-            font-size: 11px;
-            color: var(--muted);
-        }
-        
-        .timeline-title {
-            font-weight: 600;
-            font-size: 13px;
-        }
-        
         .page-alert {
             padding: 12px 16px;
             border-radius: 8px;
@@ -682,29 +579,49 @@ if (isset($_GET['view'])) {
             border: 1px solid #fecaca;
         }
         
-        .tabs {
-            display: flex;
-            gap: 2px;
-            background: #f3f4f6;
-            padding: 4px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+        .job-detail-view {
+            background: #fff;
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border);
+            padding: 24px;
+            margin-bottom: 24px;
         }
         
-        .tab {
-            flex: 1;
-            padding: 10px;
-            text-align: center;
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .detail-title {
+            font-family: "Syne", sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .detail-subtitle {
+            color: var(--muted);
+            font-size: 13px;
+        }
+        
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #f3f4f6;
             border-radius: 8px;
-            cursor: pointer;
+            text-decoration: none;
+            color: var(--text);
             font-size: 13px;
             font-weight: 500;
-            transition: all .2s;
         }
         
-        .tab.active {
-            background: #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,.05);
+        .back-btn:hover {
+            background: #e5e7eb;
         }
         
         @media (max-width: 1024px) {
@@ -734,7 +651,7 @@ if (isset($_GET['view'])) {
         <nav class="nav-section">
             <div class="nav-label">Main</div>
             <a class="nav-item" href="admin_dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a>
-            <a class="nav-item active" href="new_job_order.php"><i class="bi bi-clipboard-data"></i> Job Orders</a>
+            <a class="nav-item active" href="job_orders.php"><i class="bi bi-clipboard-data"></i> Job Orders</a>
             <a class="nav-item" href="sales.php"><i class="bi bi-currency-dollar"></i> Sales</a>
             <a class="nav-item" href="payments.php"><i class="bi bi-credit-card"></i> Payments</a>
             <a class="nav-item" href="products.php"><i class="bi bi-box-seam"></i> Products</a>
@@ -791,6 +708,88 @@ if (isset($_GET['view'])) {
                 <div class="page-alert error"><i class="bi bi-exclamation-triangle-fill"></i> <?= htmlspecialchars($errorMsg) ?></div>
             <?php endif; ?>
 
+            <?php if ($selected_job): ?>
+                <!-- Job Detail View -->
+                <div class="job-detail-view">
+                    <div class="detail-header">
+                        <div>
+                            <div class="detail-title">Job Order #<?= str_pad($selected_job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></div>
+                            <div class="detail-subtitle">Created on <?= date('F d, Y \a\t h:i A', strtotime($selected_job['date_received'])) ?></div>
+                        </div>
+                        <a href="job_orders.php" class="back-btn"><i class="bi bi-arrow-left"></i> Back to List</a>
+                    </div>
+                    
+                    <div class="detail-grid">
+                        <div class="info-box">
+                            <div class="detail-label">Customer Information</div>
+                            <div class="detail-value"><?= htmlspecialchars($selected_job['customer_name']) ?></div>
+                            <div style="font-size:12px; margin-top:8px;">
+                                <div><i class="bi bi-telephone"></i> <?= htmlspecialchars($selected_job['contact_number']) ?></div>
+                                <div><i class="bi bi-envelope"></i> <?= htmlspecialchars($selected_job['email'] ?? 'N/A') ?></div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-box">
+                            <div class="detail-label">Vehicle Information</div>
+                            <div class="detail-value"><?= htmlspecialchars($selected_job['brand'] . ' ' . $selected_job['model']) ?></div>
+                            <div style="font-size:12px; margin-top:8px;">
+                                <div>Plate: <?= htmlspecialchars($selected_job['plate_number']) ?></div>
+                                <div>Year: <?= htmlspecialchars($selected_job['year_model']) ?></div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-box">
+                            <div class="detail-label">Job Details</div>
+                            <div><strong>Service:</strong> <?= htmlspecialchars($selected_job['service_type'] ?? 'N/A') ?></div>
+                            <div><strong>Mechanic:</strong> <?= htmlspecialchars($selected_job['mechanic_name'] ?? 'Unassigned') ?></div>
+                            <div><strong>Status:</strong> <span class="status-badge status-<?= strtolower($selected_job['status']) ?>"><?= $selected_job['status'] ?></span></div>
+                        </div>
+                        
+                        <div class="info-box">
+                            <div class="detail-label">Dates</div>
+                            <div><strong>Received:</strong> <?= date('M d, Y h:i A', strtotime($selected_job['date_received'])) ?></div>
+                            <?php if ($selected_job['date_completed']): ?>
+                                <div><strong>Completed:</strong> <?= date('M d, Y h:i A', strtotime($selected_job['date_completed'])) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <?php if (!empty($selected_job['customer_complaint'])): ?>
+                        <div class="info-box" style="grid-column: span 2;">
+                            <div class="detail-label">Customer Complaint</div>
+                            <div><?= nl2br(htmlspecialchars($selected_job['customer_complaint'])) ?></div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <div class="info-box" style="grid-column: span 2;">
+                            <div class="detail-label">Job Description</div>
+                            <div><?= nl2br(htmlspecialchars($selected_job['job_description'])) ?></div>
+                        </div>
+                        
+                        <?php if (!empty($selected_job['repair_notes'])): ?>
+                        <div class="info-box" style="grid-column: span 2;">
+                            <div class="detail-label">Repair Notes</div>
+                            <div><?= nl2br(htmlspecialchars($selected_job['repair_notes'])) ?></div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($selected_job['notes'])): ?>
+                        <div class="info-box" style="grid-column: span 2;">
+                            <div class="detail-label">Additional Notes</div>
+                            <div><?= nl2br(htmlspecialchars($selected_job['notes'])) ?></div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <?php if ($selected_job['status'] === 'Ongoing'): ?>
+                        <div style="margin-top: 20px; text-align: right;">
+                            <button class="btn-success" onclick="completeJob(<?= $selected_job['job_order_id'] ?>)">
+                                <i class="bi bi-check"></i> Complete Job & Create Transaction
+                            </button>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
             <!-- Stats Cards -->
             <div class="job-stats">
                 <div class="stat-card pending">
@@ -836,7 +835,7 @@ if (isset($_GET['view'])) {
                         <input type="date" name="date_to" value="<?= $filter_date_to ?>">
                         <button type="submit" class="btn-primary"><i class="bi bi-funnel"></i> Filter</button>
                         <?php if ($filter_status !== 'all' || !empty($filter_search) || $filter_customer > 0): ?>
-                            <a href="new_job_order.php" class="btn-outline">Clear</a>
+                            <a href="job_orders.php" class="btn-outline">Clear</a>
                         <?php endif; ?>
                     </div>
                 </form>
@@ -851,7 +850,6 @@ if (isset($_GET['view'])) {
                             <th>Customer / Vehicle</th>
                             <th>Service</th>
                             <th>Mechanic</th>
-                            <th>Priority</th>
                             <th>Status</th>
                             <th>Date Received</th>
                             <th>Actions</th>
@@ -860,7 +858,7 @@ if (isset($_GET['view'])) {
                     <tbody>
                         <?php if (empty($job_orders)): ?>
                             <tr>
-                                <td colspan="8" style="text-align: center; padding: 48px;">
+                                <td colspan="7" style="text-align: center; padding: 48px;">
                                     <i class="bi bi-clipboard-x" style="font-size: 48px; color: #ccc;"></i>
                                     <p style="margin-top: 16px; color: #666;">No job orders found</p>
                                     <button class="btn-primary" onclick="openModal('newJobModal')">Create First Job Order</button>
@@ -868,13 +866,6 @@ if (isset($_GET['view'])) {
                             </tr>
                         <?php else: ?>
                             <?php foreach ($job_orders as $job): 
-                                $priority_class = match(strtolower($job['priority'] ?? 'Normal')) {
-                                    'emergency' => 'priority-emergency',
-                                    'high' => 'priority-high',
-                                    'normal' => 'priority-normal',
-                                    'low' => 'priority-low',
-                                    default => 'priority-normal'
-                                };
                                 $status_class = 'status-' . strtolower($job['status']);
                             ?>
                                 <tr onclick="viewJobDetails(<?= $job['job_order_id'] ?>)">
@@ -883,9 +874,8 @@ if (isset($_GET['view'])) {
                                         <div><?= htmlspecialchars($job['customer_name'] ?? '—') ?></div>
                                         <div style="font-size: 11px; color: #666;"><?= htmlspecialchars($job['vehicle_info'] ?? '') ?></div>
                                     </td>
-                                    <td><?= htmlspecialchars(substr($job['job_description'], 0, 30)) ?>...</td>
+                                    <td><?= htmlspecialchars($job['service_type'] ?? '—') ?></td>
                                     <td><?= htmlspecialchars($job['mechanic_name'] ?? 'Unassigned') ?></td>
-                                    <td><span class="priority-badge <?= $priority_class ?>"><?= $job['priority'] ?? 'Normal' ?></span></td>
                                     <td><span class="status-badge <?= $status_class ?>"><?= $job['status'] ?></span></td>
                                     <td><?= date('M d, Y', strtotime($job['date_received'])) ?></td>
                                     <td onclick="event.stopPropagation()">
@@ -896,6 +886,10 @@ if (isset($_GET['view'])) {
                                         <?php elseif ($job['status'] === 'Ongoing'): ?>
                                             <button class="btn-success" style="padding: 5px 10px;" onclick="completeJob(<?= $job['job_order_id'] ?>)">
                                                 <i class="bi bi-check"></i> Complete
+                                            </button>
+                                        <?php elseif ($job['status'] === 'Completed'): ?>
+                                            <button class="btn-outline" style="padding: 5px 10px;" onclick="createTransaction(<?= $job['job_order_id'] ?>)">
+                                                <i class="bi bi-cash"></i> Create Transaction
                                             </button>
                                         <?php endif; ?>
                                     </td>
@@ -945,31 +939,14 @@ if (isset($_GET['view'])) {
                     <!-- Job Details -->
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Service Type</label>
-                            <select name="service_type">
+                            <label>Service Type *</label>
+                            <select name="service_type" required>
                                 <option value="">Select Service</option>
                                 <?php foreach ($service_types as $service): ?>
                                     <option value="<?= $service ?>"><?= $service ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Priority</label>
-                            <select name="priority">
-                                <option value="Normal">Normal</option>
-                                <option value="High">High</option>
-                                <option value="Emergency">Emergency</option>
-                                <option value="Low">Low</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Job Description *</label>
-                        <textarea name="job_description" rows="3" required placeholder="Describe the work needed..."></textarea>
-                    </div>
-
-                    <div class="form-row">
                         <div class="form-group">
                             <label>Assigned Mechanic *</label>
                             <select name="assigned_mechanic" required>
@@ -979,32 +956,11 @@ if (isset($_GET['view'])) {
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Labor Fee (₱)</label>
-                            <input type="number" name="labor_fee" step="0.01" min="0" value="0">
-                        </div>
                     </div>
 
-                    <div class="form-row three-col">
-                        <div class="form-group">
-                            <label>Estimated Cost (₱)</label>
-                            <input type="number" name="estimated_cost" step="0.01" min="0" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Odometer Reading</label>
-                            <input type="number" name="odometer_reading" min="0" placeholder="km">
-                        </div>
-                        <div class="form-group">
-                            <label>Fuel Level</label>
-                            <select name="fuel_level">
-                                <option value="">Select</option>
-                                <option value="Full">Full</option>
-                                <option value="3/4">3/4</option>
-                                <option value="1/2">1/2</option>
-                                <option value="1/4">1/4</option>
-                                <option value="Empty">Empty</option>
-                            </select>
-                        </div>
+                    <div class="form-group">
+                        <label>Job Description *</label>
+                        <textarea name="job_description" rows="3" required placeholder="Describe the work needed..."></textarea>
                     </div>
 
                     <div class="form-group">
@@ -1025,34 +981,26 @@ if (isset($_GET['view'])) {
         </div>
     </div>
 
-    <!-- Update Status Modal (for Ongoing → Completed) -->
-    <div class="modal-overlay" id="completeJobModal">
+    <!-- Update Status Modal (for Pending → Ongoing) -->
+    <div class="modal-overlay" id="startJobModal">
         <div class="modal">
             <div class="modal-header">
-                <h2><i class="bi bi-check-circle" style="color:#10b981;"></i> Complete Job Order</h2>
-                <button class="modal-close" onclick="closeModal('completeJobModal')">&times;</button>
+                <h2><i class="bi bi-play-circle" style="color:#3b82f6;"></i> Start Job Order</h2>
+                <button class="modal-close" onclick="closeModal('startJobModal')">&times;</button>
             </div>
             <form method="POST">
                 <input type="hidden" name="action" value="update_status">
-                <input type="hidden" name="job_order_id" id="complete_job_id">
-                <input type="hidden" name="status" value="Completed">
+                <input type="hidden" name="job_order_id" id="start_job_id">
+                <input type="hidden" name="status" value="Ongoing">
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Repair Notes / Work Done</label>
-                        <textarea name="repair_notes" rows="3" required placeholder="Describe the repairs performed..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Parts Used</label>
-                        <textarea name="parts_used" rows="2" placeholder="List parts replaced or used..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Actual Cost (₱)</label>
-                        <input type="number" name="actual_cost" step="0.01" min="0" value="0" required>
+                        <label>Initial Notes</label>
+                        <textarea name="repair_notes" rows="3" placeholder="Add any initial notes about starting this job..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-outline" onclick="closeModal('completeJobModal')">Cancel</button>
-                    <button type="submit" class="btn-success"><i class="bi bi-check-lg"></i> Complete Job</button>
+                    <button type="button" class="btn-outline" onclick="closeModal('startJobModal')">Cancel</button>
+                    <button type="submit" class="btn-primary"><i class="bi bi-play"></i> Start Job</button>
                 </div>
             </form>
         </div>
@@ -1088,37 +1036,49 @@ if (isset($_GET['view'])) {
             vehicleSelect.value = '';
         }
 
-        // Update job status
+        // Update job status (Pending to Ongoing)
         function updateStatus(jobId, newStatus) {
-            if (confirm('Change job status to ' + newStatus + '?')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.innerHTML = `
-                    <input type="hidden" name="action" value="update_status">
-                    <input type="hidden" name="job_order_id" value="${jobId}">
-                    <input type="hidden" name="status" value="${newStatus}">
-                `;
-                document.body.appendChild(form);
-                form.submit();
+            if (newStatus === 'Ongoing') {
+                document.getElementById('start_job_id').value = jobId;
+                openModal('startJobModal');
+            } else {
+                if (confirm('Change job status to ' + newStatus + '?')) {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.innerHTML = `
+                        <input type="hidden" name="action" value="update_status">
+                        <input type="hidden" name="job_order_id" value="${jobId}">
+                        <input type="hidden" name="status" value="${newStatus}">
+                    `;
+                    document.body.appendChild(form);
+                    form.submit();
+                }
             }
         }
 
-        // Complete job modal
+        // Complete job - redirect to create transaction
         function completeJob(jobId) {
-            document.getElementById('complete_job_id').value = jobId;
-            openModal('completeJobModal');
+            if (confirm('Mark this job as completed and create transaction?')) {
+                window.location.href = 'create_transaction.php?job_id=' + jobId;
+            }
+        }
+
+        // Create transaction for completed job
+        function createTransaction(jobId) {
+            window.location.href = 'create_transaction.php?job_id=' + jobId;
         }
 
         // View job details
         function viewJobDetails(jobId) {
-            window.location.href = 'new_job_order.php?view=' + jobId;
+            window.location.href = 'job_orders.php?view=' + jobId;
         }
 
         // Initialize vehicle filtering on page load
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('view')) {
-                // Could show detail modal here
+                // Scroll to top to show details
+                window.scrollTo(0, 0);
             }
         };
     </script>
