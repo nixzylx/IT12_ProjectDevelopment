@@ -533,7 +533,7 @@ $isOwner = strtolower($role) === 'owner';
 
         <div class="content">
             <div class="greeting">
-                <h1><?= $greeting ?>, <?= $firstname ?>! 👋</h1>
+                <h1><?= $greeting ?>, <?= $firstname ?>!</h1>
                 <p><?= $todayLabel ?></p>
             </div>
 
