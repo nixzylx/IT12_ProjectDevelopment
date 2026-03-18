@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $job_order_id = intval($_POST['job_order_id'] ?? 0) ?: null;
         $discount = floatval($_POST['discount'] ?? 0);
         $processed_by = $_SESSION['employeeID'];
-        $items = $_POST['items'] ?? []; 
+        $items = $_POST['items'] ?? [];
 
         if ($customer_id && !empty($items)) {
             $total = 0;
@@ -206,6 +206,7 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -294,8 +295,7 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             background: #fff;
         }
 
-        .toolbar select,
-        .toolbar input[type=date] {
+        .toolbar select {
             padding: 9px 12px;
             border: 1px solid var(--border);
             border-radius: 8px;
@@ -308,6 +308,16 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             background-position: right 12px center;
             background-size: 12px;
             padding-right: 36px;
+        }
+
+        .toolbar input[type=date] {
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+            appearance: none;
         }
 
         .btn-primary {

@@ -1158,3 +1158,9 @@ body.login {
   align-items: center;
   gap: 4px;
 }
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}

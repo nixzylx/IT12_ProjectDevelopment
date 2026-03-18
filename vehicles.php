@@ -667,7 +667,7 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
         <nav class="nav-section">
             <div class="nav-label">Main</div>
             <a class="nav-item" href="admin_dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a>
-            <a class="nav-item" href="job_orders.php"><i class="bi bi-clipboard-data"></i> Job Orders</a>
+            <a class="nav-item" href="new_job_order.php"><i class="bi bi-clipboard-data"></i> Job Orders</a>
             <a class="nav-item" href="sales.php"><i class="bi bi-currency-dollar"></i> Sales</a>
             <a class="nav-item" href="payments.php"><i class="bi bi-credit-card"></i> Payments</a>
             <a class="nav-item" href="products.php"><i class="bi bi-box-seam"></i> Products</a>

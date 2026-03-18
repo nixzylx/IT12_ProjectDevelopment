@@ -78,32 +78,34 @@ try {
                          WHERE s.status = 'Unpaid' ORDER BY s.sales_date DESC LIMIT 5");
     while ($res && $row = $res->fetch_assoc()) {
         $notifications[] = [
-            'type'    => 'unpaid',
-            'icon'    => 'bi-exclamation-circle-fill',
-            'color'   => '#f97316',
-            'title'   => 'Unpaid Invoice',
+            'type' => 'unpaid',
+            'icon' => 'bi-exclamation-circle-fill',
+            'color' => '#f97316',
+            'title' => 'Unpaid Invoice',
             'message' => htmlspecialchars($row['customer']) . ' — ₱' . number_format($row['final_amount'], 2),
-            'time'    => $row['sales_date'],
-            'link'    => 'sales.php?status=Unpaid',
+            'time' => $row['sales_date'],
+            'link' => 'sales.php?status=Unpaid',
         ];
     }
-} catch (Exception $e) {}
+} catch (Exception $e) {
+}
 
 // Pending approvals
 try {
     $res = $conn->query("SELECT first_name, last_name, role, created_at FROM employee WHERE is_approved = 0 ORDER BY created_at DESC LIMIT 5");
     while ($res && $row = $res->fetch_assoc()) {
         $notifications[] = [
-            'type'    => 'approval',
-            'icon'    => 'bi-person-fill-exclamation',
-            'color'   => '#2563eb',
-            'title'   => 'Pending Approval',
-            'message' => htmlspecialchars($row['first_name'].' '.$row['last_name']) . ' (' . htmlspecialchars($row['role']) . ')',
-            'time'    => $row['created_at'],
-            'link'    => 'admin_approvals.php',
+            'type' => 'approval',
+            'icon' => 'bi-person-fill-exclamation',
+            'color' => '#2563eb',
+            'title' => 'Pending Approval',
+            'message' => htmlspecialchars($row['first_name'] . ' ' . $row['last_name']) . ' (' . htmlspecialchars($row['role']) . ')',
+            'time' => $row['created_at'],
+            'link' => 'admin_approvals.php',
         ];
     }
-} catch (Exception $e) {}
+} catch (Exception $e) {
+}
 
 // Active job orders notifications
 try {
@@ -112,16 +114,17 @@ try {
                          WHERE jo.status IN ('Pending','Ongoing') ORDER BY jo.date_received DESC LIMIT 3");
     while ($res && $row = $res->fetch_assoc()) {
         $notifications[] = [
-            'type'    => 'job',
-            'icon'    => 'bi-wrench-adjustable-circle-fill',
-            'color'   => '#16a34a',
-            'title'   => 'Active Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT),
+            'type' => 'job',
+            'icon' => 'bi-wrench-adjustable-circle-fill',
+            'color' => '#16a34a',
+            'title' => 'Active Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT),
             'message' => htmlspecialchars($row['customer']) . ' — ' . htmlspecialchars($row['status']),
-            'time'    => $row['date_received'],
-            'link'    => 'job_orders.php?view=' . $row['job_order_id'],
+            'time' => $row['date_received'],
+            'link' => 'job_orders.php?view=' . $row['job_order_id'],
         ];
     }
-} catch (Exception $e) {}
+} catch (Exception $e) {
+}
 
 // Completed jobs today notifications
 try {
@@ -131,16 +134,17 @@ try {
                          ORDER BY jo.date_completed DESC LIMIT 2");
     while ($res && $row = $res->fetch_assoc()) {
         $notifications[] = [
-            'type'    => 'completed',
-            'icon'    => 'bi-check-circle-fill',
-            'color'   => '#10b981',
-            'title'   => 'Job Completed Today',
+            'type' => 'completed',
+            'icon' => 'bi-check-circle-fill',
+            'color' => '#10b981',
+            'title' => 'Job Completed Today',
             'message' => 'Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT) . ' - ' . htmlspecialchars($row['customer']),
-            'time'    => $row['date_completed'],
-            'link'    => 'job_orders.php?view=' . $row['job_order_id'],
+            'time' => $row['date_completed'],
+            'link' => 'job_orders.php?view=' . $row['job_order_id'],
         ];
     }
-} catch (Exception $e) {}
+} catch (Exception $e) {
+}
 
 // Sort by time descending
 usort($notifications, fn($a, $b) => strtotime($b['time']) - strtotime($a['time']));
@@ -350,7 +354,7 @@ if (isset($conn) && $conn) {
     } catch (Exception $e) {
         $creditAccounts = [];
     }
-    
+
     // Pending approvals count
     try {
         $pa_res = $conn->query("SELECT COUNT(*) AS cnt FROM employee WHERE is_approved = 0");
@@ -388,35 +392,46 @@ $isOwner = strtolower($role) === 'owner';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AutoBert — Admin Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="style.css">
+
     <style>
         .notif-count {
             position: absolute;
-            top: -6px; right: -6px;
+            top: -6px;
+            right: -6px;
             background: #ef4444;
             color: #fff;
             border-radius: 50%;
-            width: 18px; height: 18px;
-            font-size: 10px; font-weight: 700;
-            display: flex; align-items: center; justify-content: center;
+            width: 18px;
+            height: 18px;
+            font-size: 10px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border: 2px solid #fff;
         }
 
         .notif-panel {
             display: none;
             position: absolute;
-            top: 54px; right: 16px;
+            top: 54px;
+            right: 16px;
             width: 360px;
             background: #fff;
             border: 1px solid var(--border);
             border-radius: 16px;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.14);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14);
             z-index: 200;
             overflow: hidden;
             animation: fadeUp 0.2s ease;
         }
-        .notif-panel.open { display: block; }
+
+        .notif-panel.open {
+            display: block;
+        }
 
         .notif-panel-header {
             display: flex;
@@ -425,6 +440,7 @@ $isOwner = strtolower($role) === 'owner';
             padding: 16px 20px;
             border-bottom: 1px solid var(--border);
         }
+
         .notif-panel-title {
             font-weight: 700;
             font-size: 14px;
@@ -434,7 +450,9 @@ $isOwner = strtolower($role) === 'owner';
             color: var(--text);
         }
 
-        .notif-panel-title i { color: var(--accent); }
+        .notif-panel-title i {
+            color: var(--accent);
+        }
 
         .notif-panel-badge {
             background: var(--accent);
@@ -445,9 +463,19 @@ $isOwner = strtolower($role) === 'owner';
             font-weight: 600;
         }
 
-        .notif-panel-body { max-height: 360px;overflow-y: auto; }
-        .notif-panel-body::-webkit-scrollbar { width: 4px; }
-        .notif-panel-body::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 4px; }
+        .notif-panel-body {
+            max-height: 360px;
+            overflow-y: auto;
+        }
+
+        .notif-panel-body::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .notif-panel-body::-webkit-scrollbar-thumb {
+            background: #e0e0e0;
+            border-radius: 4px;
+        }
 
         .notif-item {
             display: flex;
@@ -460,21 +488,52 @@ $isOwner = strtolower($role) === 'owner';
             transition: background 0.15s;
         }
 
-        .notif-item:hover { background: #f9fafb; }
-        .notif-item:last-child { border-bottom: none; }
+        .notif-item:hover {
+            background: #f9fafb;
+        }
+
+        .notif-item:last-child {
+            border-bottom: none;
+        }
 
         .notif-item-icon {
-            width: 38px; height: 38px;
+            width: 38px;
+            height: 38px;
             border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 16px;
             flex-shrink: 0;
         }
 
-        .notif-item-content { flex: 1; min-width: 0; }
-        .notif-item-title   { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-        .notif-item-message { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .notif-item-time    { font-size: 11px; color: #bbb; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+        .notif-item-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .notif-item-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .notif-item-message {
+            font-size: 12px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .notif-item-time {
+            font-size: 11px;
+            color: #bbb;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
 
         .notif-empty {
             padding: 40px 20px;
@@ -482,8 +541,16 @@ $isOwner = strtolower($role) === 'owner';
             color: var(--muted);
         }
 
-        .notif-empty i { font-size: 36px; display: block; margin-bottom: 10px; opacity: .3; }
-        .notif-empty p { font-size: 13px; }
+        .notif-empty i {
+            font-size: 36px;
+            display: block;
+            margin-bottom: 10px;
+            opacity: .3;
+        }
+
+        .notif-empty p {
+            font-size: 13px;
+        }
 
         .notif-panel-footer {
             display: flex;
@@ -499,10 +566,15 @@ $isOwner = strtolower($role) === 'owner';
             text-decoration: none;
             font-weight: 500;
         }
-        
-        .notif-panel-footer a:hover { text-decoration: underline; }
-        .topbar { position: relative; }
-        
+
+        .notif-panel-footer a:hover {
+            text-decoration: underline;
+        }
+
+        .topbar {
+            position: relative;
+        }
+
         .stat-link {
             text-decoration: none;
             color: inherit;
@@ -513,7 +585,7 @@ $isOwner = strtolower($role) === 'owner';
         .vehicle-mini-list {
             margin-top: 16px;
         }
-        
+
         .vehicle-mini-item {
             display: flex;
             align-items: center;
@@ -524,32 +596,32 @@ $isOwner = strtolower($role) === 'owner';
             text-decoration: none;
             color: inherit;
         }
-        
+
         .vehicle-mini-item:hover {
             background: #f9fafb;
         }
-        
+
         .vehicle-mini-info {
             display: flex;
             flex-direction: column;
             gap: 2px;
         }
-        
+
         .vehicle-mini-name {
             font-weight: 600;
             font-size: 13px;
         }
-        
+
         .vehicle-mini-plate {
             font-size: 11px;
             color: var(--accent);
         }
-        
+
         .vehicle-mini-owner {
             font-size: 11px;
             color: var(--muted);
         }
-        
+
         .vehicle-mini-link {
             color: var(--accent);
             font-size: 12px;
@@ -558,11 +630,11 @@ $isOwner = strtolower($role) === 'owner';
         /* Stats Cards */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(5, 1fr);
             gap: 20px;
             margin-bottom: 30px;
         }
-        
+
         .stat-card {
             background: #fff;
             border-radius: var(--card-radius);
@@ -570,27 +642,27 @@ $isOwner = strtolower($role) === 'owner';
             border: 1px solid var(--border);
             transition: transform 0.2s, box-shadow 0.2s;
         }
-        
+
         .stat-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         }
-        
+
         .stat-card.featured {
             background: linear-gradient(135deg, #2563eb, #1d4ed8);
             color: #fff;
         }
-        
+
         .stat-card.featured .stat-label,
         .stat-card.featured .stat-change {
-            color: rgba(255,255,255,0.8);
+            color: rgba(255, 255, 255, 0.8);
         }
-        
+
         .stat-icon {
             font-size: 32px;
             margin-bottom: 12px;
         }
-        
+
         .stat-label {
             font-size: 12px;
             color: var(--muted);
@@ -598,14 +670,14 @@ $isOwner = strtolower($role) === 'owner';
             letter-spacing: 0.5px;
             margin-bottom: 4px;
         }
-        
+
         .stat-value {
             font-family: 'Syne', sans-serif;
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 8px;
         }
-        
+
         .stat-change {
             font-size: 12px;
             color: var(--muted);
@@ -613,10 +685,15 @@ $isOwner = strtolower($role) === 'owner';
             align-items: center;
             gap: 4px;
         }
-        
-        .stat-change.up { color: #10b981; }
-        .stat-change.down { color: #ef4444; }
-        
+
+        .stat-change.up {
+            color: #10b981;
+        }
+
+        .stat-change.down {
+            color: #ef4444;
+        }
+
         /* Stats Subgrid */
         .stats-subgrid {
             display: grid;
@@ -624,25 +701,25 @@ $isOwner = strtolower($role) === 'owner';
             gap: 16px;
             margin-bottom: 30px;
         }
-        
+
         .stat-card.small {
             padding: 16px;
         }
-        
+
         .stat-card.small .stat-icon {
             font-size: 24px;
             margin-bottom: 8px;
         }
-        
+
         .stat-card.small .stat-label {
             font-size: 11px;
         }
-        
+
         .stat-card.small .stat-value {
             font-size: 22px;
             margin-bottom: 4px;
         }
-        
+
         /* Bottom Grid */
         .bottom-grid {
             display: grid;
@@ -650,20 +727,20 @@ $isOwner = strtolower($role) === 'owner';
             gap: 24px;
             margin-bottom: 24px;
         }
-        
+
         .row-bottom {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 24px;
         }
-        
+
         .card {
             background: #fff;
             border-radius: var(--card-radius);
             border: 1px solid var(--border);
             overflow: hidden;
         }
-        
+
         .card-header {
             display: flex;
             justify-content: space-between;
@@ -671,30 +748,30 @@ $isOwner = strtolower($role) === 'owner';
             padding: 16px 20px;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .card-title {
             font-family: 'Syne', sans-serif;
             font-weight: 700;
             font-size: 16px;
         }
-        
+
         .card-sub {
             font-size: 12px;
             color: var(--muted);
             margin-top: 2px;
         }
-        
+
         .card-link {
             color: var(--accent);
             text-decoration: none;
             font-size: 12px;
             font-weight: 600;
         }
-        
+
         .job-table {
             width: 100%;
         }
-        
+
         .job-table th {
             text-align: left;
             padding: 12px 16px;
@@ -705,32 +782,32 @@ $isOwner = strtolower($role) === 'owner';
             background: #f9fafb;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .job-table td {
             padding: 12px 16px;
             font-size: 13px;
             border-bottom: 1px solid #f3f4f6;
         }
-        
+
         .job-table tr:last-child td {
             border-bottom: none;
         }
-        
+
         .job-table tbody tr {
             cursor: pointer;
             transition: background 0.15s;
         }
-        
+
         .job-table tbody tr:hover {
             background: #f9fafb;
         }
-        
+
         .job-id {
             font-family: 'Syne', sans-serif;
             font-weight: 700;
             color: var(--accent);
         }
-        
+
         .status-badge {
             display: inline-block;
             padding: 4px 12px;
@@ -738,23 +815,34 @@ $isOwner = strtolower($role) === 'owner';
             font-size: 11px;
             font-weight: 600;
         }
-        
-        .status-pending { background: #fef3c7; color: #92400e; }
-        .status-ongoing { background: #dbeafe; color: #1e40af; }
-        .status-completed { background: #dcfce7; color: #166534; }
-        
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-ongoing {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-completed {
+            background: #dcfce7;
+            color: #166534;
+        }
+
         .vehicle-info {
             font-size: 11px;
             color: #666;
             margin-top: 2px;
         }
-        
+
         .mechanic-info {
             display: flex;
             align-items: center;
             gap: 6px;
         }
-        
+
         .mechanic-avatar {
             width: 22px;
             height: 22px;
@@ -767,28 +855,28 @@ $isOwner = strtolower($role) === 'owner';
             font-size: 10px;
             font-weight: 600;
         }
-        
+
         .empty-state {
             text-align: center;
             padding: 40px 20px;
         }
-        
+
         .empty-icon {
             font-size: 48px;
             margin-bottom: 16px;
             opacity: 0.3;
         }
-        
+
         .empty-text {
             color: var(--muted);
             font-size: 14px;
         }
-        
+
         /* Credit List */
         .credit-list {
             padding: 8px 0;
         }
-        
+
         .credit-row {
             display: flex;
             justify-content: space-between;
@@ -796,37 +884,44 @@ $isOwner = strtolower($role) === 'owner';
             padding: 12px 16px;
             border-bottom: 1px solid #f3f4f6;
         }
-        
+
         .credit-row:last-child {
             border-bottom: none;
         }
-        
+
         .credit-name {
             font-weight: 600;
             font-size: 13px;
         }
-        
+
         .credit-limit {
             font-size: 11px;
             color: var(--muted);
             margin-top: 2px;
         }
-        
+
         .credit-amount {
             font-weight: 700;
             font-size: 14px;
         }
-        
-        .credit-amount.owed { color: #dc2626; }
-        
-        .overdue { color: #dc2626; }
-        .due-soon { color: #f97316; }
-        
+
+        .credit-amount.owed {
+            color: #dc2626;
+        }
+
+        .overdue {
+            color: #dc2626;
+        }
+
+        .due-soon {
+            color: #f97316;
+        }
+
         /* Chart */
         .mini-chart {
             padding: 20px;
         }
-        
+
         .chart-bars {
             display: flex;
             justify-content: space-around;
@@ -834,31 +929,31 @@ $isOwner = strtolower($role) === 'owner';
             height: 120px;
             margin-top: 20px;
         }
-        
+
         .bar-wrap {
             display: flex;
             flex-direction: column;
             align-items: center;
             width: 40px;
         }
-        
+
         .bar {
             width: 30px;
             background: #e2e8f0;
             border-radius: 6px 6px 0 0;
             transition: height 0.3s;
         }
-        
+
         .bar.active {
             background: var(--accent);
         }
-        
+
         .bar-label {
             font-size: 11px;
             color: var(--muted);
             margin-top: 8px;
         }
-        
+
         /* Quick Actions */
         .qa-grid {
             display: grid;
@@ -866,13 +961,13 @@ $isOwner = strtolower($role) === 'owner';
             gap: 12px;
             padding: 20px;
         }
-        
+
         .qa-btn {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 8px;
-            padding: 16px 8px;
+            gap: 10px;
+            padding: 20px 8px;
             background: #f8fafc;
             border: 1px solid var(--border);
             border-radius: 12px;
@@ -880,55 +975,56 @@ $isOwner = strtolower($role) === 'owner';
             transition: all 0.2s;
             width: 100%;
         }
-        
+
         .qa-btn:hover {
             background: #fff;
             border-color: var(--accent);
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, .1);
         }
-        
+
         .qa-icon {
             font-size: 24px;
         }
-        
+
         .qa-btn span {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text);
         }
-        
+
         /* Greeting */
         .greeting {
             margin-bottom: 24px;
         }
-        
+
         .greeting h1 {
             font-family: 'Syne', sans-serif;
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 4px;
         }
-        
+
         .greeting p {
             color: var(--muted);
             font-size: 14px;
         }
-        
+
         @media (max-width: 1200px) {
             .bottom-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .row-bottom {
                 grid-template-columns: 1fr;
             }
         }
-        
+
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
-            
+
             .stats-subgrid {
                 grid-template-columns: 1fr;
             }
@@ -955,7 +1051,7 @@ $isOwner = strtolower($role) === 'owner';
             <a class="nav-item active" href="admin_dashboard.php">
                 <i class="bi bi-speedometer2"></i> Dashboard
             </a>
-            <a class="nav-item" href="job_orders.php">
+            <a class="nav-item" href="new_job_order.php">
                 <i class="bi bi-clipboard-data"></i> Job Orders
                 <?php if ($activeJobs > 0): ?>
                     <span class="pending-approvals-badge" style="background: var(--accent);"><?= $activeJobs ?></span>
@@ -1003,12 +1099,12 @@ $isOwner = strtolower($role) === 'owner';
         </nav>
 
         <?php if ($isOwner): ?>
-        <nav class="nav-section">
-            <div class="nav-label">Owner</div>
-            <a class="nav-item" href="reports.php">
-                <i class="bi bi-bar-chart-line"></i> Reports
-            </a>
-        </nav>
+            <nav class="nav-section">
+                <div class="nav-label">Owner</div>
+                <a class="nav-item" href="reports.php">
+                    <i class="bi bi-bar-chart-line"></i> Reports
+                </a>
+            </nav>
         <?php endif; ?>
 
         <div class="sidebar-footer">
@@ -1041,7 +1137,8 @@ $isOwner = strtolower($role) === 'owner';
 
             <div class="topbar-right">
                 <!-- Notification Bell -->
-                <div class="icon-btn notif-trigger" onclick="toggleNotifPanel()" id="notifBtn" style="position:relative;">
+                <div class="icon-btn notif-trigger" onclick="toggleNotifPanel()" id="notifBtn"
+                    style="position:relative;">
                     <i class="bi bi-bell"></i>
                     <?php if ($notifCount > 0): ?>
                         <span class="notif-count"><?= $notifCount ?></span>
@@ -1064,33 +1161,38 @@ $isOwner = strtolower($role) === 'owner';
                             </div>
                         <?php else: ?>
                             <?php foreach ($notifications as $n): ?>
-                            <a href="<?= $n['link'] ?>" class="notif-item">
-                                <div class="notif-item-icon" style="background: <?= $n['color'] ?>22; color: <?= $n['color'] ?>;">
-                                    <i class="bi <?= $n['icon'] ?>"></i>
-                                </div>
-                                <div class="notif-item-content">
-                                    <div class="notif-item-title"><?= $n['title'] ?></div>
-                                    <div class="notif-item-message"><?= $n['message'] ?></div>
-                                    <div class="notif-item-time">
-                                        <i class="bi bi-clock"></i>
-                                        <?php
-                                        $diff = time() - strtotime($n['time']);
-                                        if ($diff < 60)          echo 'Just now';
-                                        elseif ($diff < 3600)    echo floor($diff/60) . 'm ago';
-                                        elseif ($diff < 86400)   echo floor($diff/3600) . 'h ago';
-                                        else                     echo date('M d, Y', strtotime($n['time']));
-                                        ?>
+                                <a href="<?= $n['link'] ?>" class="notif-item">
+                                    <div class="notif-item-icon"
+                                        style="background: <?= $n['color'] ?>22; color: <?= $n['color'] ?>;">
+                                        <i class="bi <?= $n['icon'] ?>"></i>
                                     </div>
-                                </div>
-                            </a>
+                                    <div class="notif-item-content">
+                                        <div class="notif-item-title"><?= $n['title'] ?></div>
+                                        <div class="notif-item-message"><?= $n['message'] ?></div>
+                                        <div class="notif-item-time">
+                                            <i class="bi bi-clock"></i>
+                                            <?php
+                                            $diff = time() - strtotime($n['time']);
+                                            if ($diff < 60)
+                                                echo 'Just now';
+                                            elseif ($diff < 3600)
+                                                echo floor($diff / 60) . 'm ago';
+                                            elseif ($diff < 86400)
+                                                echo floor($diff / 3600) . 'h ago';
+                                            else
+                                                echo date('M d, Y', strtotime($n['time']));
+                                            ?>
+                                        </div>
+                                    </div>
+                                </a>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
                     <?php if ($notifCount > 0): ?>
-                    <div class="notif-panel-footer">
-                        <a href="admin_approvals.php">View all approvals →</a>
-                        <a href="sales.php?status=Unpaid">View unpaid →</a>
-                    </div>
+                        <div class="notif-panel-footer">
+                            <a href="admin_approvals.php">View all approvals →</a>
+                            <a href="sales.php?status=Unpaid">View unpaid →</a>
+                        </div>
                     <?php endif; ?>
                 </div>
                 <button class="btn-primary" onclick="window.location.href='job_orders.php'">
@@ -1112,7 +1214,10 @@ $isOwner = strtolower($role) === 'owner';
             <div class="stats-grid">
                 <a href="reports.php?report=revenue" class="stat-link">
                     <div class="stat-card featured">
-                        <div class="stat-icon">💰</div>
+                        <div class="stat-icon"
+                            style="background:rgba(255,255,255,.2); border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="fa-solid fa-sack-dollar" style="color:#fff;"></i>
+                        </div>
                         <div class="stat-label">Total Revenue</div>
                         <div class="stat-value">₱<?= number_format($totalRevenue, 2) ?></div>
                         <div class="stat-change">
@@ -1123,7 +1228,10 @@ $isOwner = strtolower($role) === 'owner';
 
                 <a href="job_orders.php?status=pending" class="stat-link">
                     <div class="stat-card">
-                        <div class="stat-icon">⏳</div>
+                        <div class="stat-icon"
+                            style="background:#fef3c7; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-hourglass-split" style="color:#d97706;"></i>
+                        </div>
                         <div class="stat-label">Pending Jobs</div>
                         <div class="stat-value"><?= $pendingJobs ?></div>
                         <div class="stat-change <?= $pendingJobs > 0 ? 'up' : 'neutral' ?>">
@@ -1134,7 +1242,10 @@ $isOwner = strtolower($role) === 'owner';
 
                 <a href="job_orders.php?status=ongoing" class="stat-link">
                     <div class="stat-card">
-                        <div class="stat-icon">🔧</div>
+                        <div class="stat-icon"
+                            style="background:#dbeafe; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-wrench-adjustable" style="color:#2563eb;"></i>
+                        </div>
                         <div class="stat-label">Ongoing Jobs</div>
                         <div class="stat-value"><?= $ongoingJobs ?></div>
                         <div class="stat-change <?= $ongoingJobs > 0 ? 'up' : 'neutral' ?>">
@@ -1145,7 +1256,10 @@ $isOwner = strtolower($role) === 'owner';
 
                 <a href="job_orders.php?status=completed&date=today" class="stat-link">
                     <div class="stat-card">
-                        <div class="stat-icon">✅</div>
+                        <div class="stat-icon"
+                            style="background:#dcfce7; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-calendar2-check" style="color:#16a34a;"></i>
+                        </div>
                         <div class="stat-label">Completed Today</div>
                         <div class="stat-value"><?= $completedToday ?></div>
                         <div class="stat-change <?= $completedToday > 0 ? 'up' : 'neutral' ?>">
@@ -1156,8 +1270,11 @@ $isOwner = strtolower($role) === 'owner';
 
                 <a href="job_orders.php?status=completed&month=current" class="stat-link">
                     <div class="stat-card">
-                        <div class="stat-icon">📊</div>
-                        <div class="stat-label">Completed This Month</div>
+                        <div class="stat-icon"
+                            style="background:#dbeafe; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-bar-chart-line-fill" style="color:#2563eb;"></i>
+                        </div>
+                        <div class="stat-label">Completed</div>
                         <div class="stat-value"><?= $completedThisMonth ?></div>
                         <div class="stat-change">
                             <i class="bi bi-calendar"></i> This month
@@ -1170,7 +1287,10 @@ $isOwner = strtolower($role) === 'owner';
             <div class="stats-subgrid">
                 <a href="vehicles.php" class="stat-link">
                     <div class="stat-card small">
-                        <div class="stat-icon">🚗</div>
+                        <div class="stat-icon"
+                            style="background:#f3f4f6; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-car-front-fill" style="color:#374151;"></i>
+                        </div>
                         <div class="stat-label">Total Vehicles</div>
                         <div class="stat-value"><?= $totalVehicles ?></div>
                         <div class="stat-change">
@@ -1178,10 +1298,13 @@ $isOwner = strtolower($role) === 'owner';
                         </div>
                     </div>
                 </a>
-                
+
                 <a href="vehicles.php?new=this-month" class="stat-link">
                     <div class="stat-card small">
-                        <div class="stat-icon">📝</div>
+                        <div class="stat-icon"
+                            style="background:#f3f4f6; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-clipboard2-fill" style="color:#374151;"></i>
+                        </div>
                         <div class="stat-label">New Vehicles</div>
                         <div class="stat-value"><?= $newVehiclesThisMonth ?></div>
                         <div class="stat-change">
@@ -1192,7 +1315,10 @@ $isOwner = strtolower($role) === 'owner';
 
                 <a href="warranties.php" class="stat-link">
                     <div class="stat-card small">
-                        <div class="stat-icon">🛡️</div>
+                        <div class="stat-icon"
+                            style="background:#dcfce7; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-shield-fill-check" style="color:#16a34a;"></i>
+                        </div>
                         <div class="stat-label">Active Warranties</div>
                         <div class="stat-value"><?= $activeWarranties ?></div>
                         <div class="stat-change">
@@ -1203,7 +1329,10 @@ $isOwner = strtolower($role) === 'owner';
 
                 <a href="sales.php?status=unpaid" class="stat-link">
                     <div class="stat-card small">
-                        <div class="stat-icon">⚠️</div>
+                        <div class="stat-icon"
+                            style="background:#fee2e2; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-exclamation-triangle-fill" style="color:#dc2626;"></i>
+                        </div>
                         <div class="stat-label">Unpaid Invoices</div>
                         <div class="stat-value"><?= $unpaidInvoices ?></div>
                         <div class="stat-change <?= $unpaidInvoices > 0 ? 'down' : 'neutral' ?>">
@@ -1250,7 +1379,8 @@ $isOwner = strtolower($role) === 'owner';
                                 <?php foreach ($activeJobRows as $job): ?>
                                     <tr onclick="window.location.href='job_orders.php?view=<?= $job['job_order_id'] ?>'">
                                         <td>
-                                            <span class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
+                                            <span
+                                                class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
                                         </td>
                                         <td>
                                             <div><?= htmlspecialchars($job['customer']) ?></div>
@@ -1292,13 +1422,15 @@ $isOwner = strtolower($role) === 'owner';
                         </div>
                         <a class="card-link" href="vehicles.php">View all →</a>
                     </div>
-                    
+
                     <div class="vehicle-mini-list">
                         <?php if (empty($recentVehicles)): ?>
-                            <div class="empty-state" style="padding: 32px;">
-                                <div class="empty-icon">🚗</div>
+                            <div class="empty-state"
+                                style="padding: 32px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div class="stat-icon"><i class="bi bi-car-front-fill"></i></div>
                                 <div class="empty-text">No vehicles registered yet</div>
-                                <button class="btn-primary" style="margin-top: 16px;" onclick="window.location.href='vehicles.php'">
+                                <button class="btn-primary" style="margin-top: 16px;"
+                                    onclick="window.location.href='vehicles.php'">
                                     Register Vehicle
                                 </button>
                             </div>
@@ -1313,7 +1445,8 @@ $isOwner = strtolower($role) === 'owner';
                                             <i class="bi bi-upc-scan"></i> <?= htmlspecialchars($vehicle['plate_number']) ?>
                                         </span>
                                         <span class="vehicle-mini-owner">
-                                            <i class="bi bi-person-circle"></i> <?= htmlspecialchars($vehicle['owner_name'] ?? 'Unknown') ?>
+                                            <i class="bi bi-person-circle"></i>
+                                            <?= htmlspecialchars($vehicle['owner_name'] ?? 'Unknown') ?>
                                         </span>
                                     </div>
                                     <div class="vehicle-mini-link">
@@ -1321,9 +1454,11 @@ $isOwner = strtolower($role) === 'owner';
                                     </div>
                                 </a>
                             <?php endforeach; ?>
-                            
-                            <div style="padding: 12px; text-align: center; border-top: 1px solid var(--border); margin-top: 8px;">
-                                <a href="vehicles.php" style="color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 600;">
+
+                            <div
+                                style="padding: 12px; text-align: center; border-top: 1px solid var(--border); margin-top: 8px;">
+                                <a href="vehicles.php"
+                                    style="color: var(--accent); text-decoration: none; font-size: 12px; font-weight: 600;">
                                     Manage All Vehicles <i class="bi bi-arrow-right"></i>
                                 </a>
                             </div>
@@ -1344,7 +1479,8 @@ $isOwner = strtolower($role) === 'owner';
                         <a class="card-link" href="reports.php">Full Report →</a>
                     </div>
                     <div class="mini-chart">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
                             <div>
                                 <div style="font-family:'Syne',sans-serif; font-size: 24px; font-weight: 700;">
                                     ₱<?= number_format($totalRevenue, 2) ?>
@@ -1390,11 +1526,11 @@ $isOwner = strtolower($role) === 'owner';
                         </div>
                         <a class="card-link" href="job_orders.php?status=completed">View all →</a>
                     </div>
-                    
+
                     <div class="vehicle-mini-list">
                         <?php if (empty($recentCompletedJobs)): ?>
                             <div class="empty-state" style="padding: 32px;">
-                                <div class="empty-icon">✅</div>
+                                <div class="empty-icon"><i class="bi bi-check-circle-fill" style="color:#16a34a;"></i></div>
                                 <div class="empty-text">No completed jobs yet</div>
                             </div>
                         <?php else: ?>
@@ -1402,7 +1538,8 @@ $isOwner = strtolower($role) === 'owner';
                                 <a href="job_orders.php?view=<?= $job['job_order_id'] ?>" class="vehicle-mini-item">
                                     <div class="vehicle-mini-info">
                                         <span class="vehicle-mini-name">
-                                            #<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?> - <?= htmlspecialchars($job['customer']) ?>
+                                            #<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?> -
+                                            <?= htmlspecialchars($job['customer']) ?>
                                         </span>
                                         <span class="vehicle-mini-plate">
                                             <i class="bi bi-truck"></i> <?= htmlspecialchars($job['vehicle']) ?>
@@ -1427,28 +1564,46 @@ $isOwner = strtolower($role) === 'owner';
                     <div class="card-title">Quick Actions</div>
                 </div>
                 <div class="qa-grid">
-                    <button class="qa-btn" onclick="window.location.href='job_orders.php'">
-                        <div class="qa-icon">📋</div>
+                    <button class="qa-btn" onclick="window.location.href='new_job_order.php'">
+                        <div class="qa-icon"
+                            style="background:#dbeafe; border-radius:12px; width:52px; height:52px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-clipboard2-plus-fill" style="color:#2563eb; font-size:22px;"></i>
+                        </div>
                         <span>New Job Order</span>
                     </button>
                     <button class="qa-btn" onclick="window.location.href='payments.php'">
-                        <div class="qa-icon">💳</div>
+                        <div class="qa-icon"
+                            style="background:#dcfce7; border-radius:12px; width:52px; height:52px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-credit-card-fill" style="color:#16a34a; font-size:22px;"></i>
+                        </div>
                         <span>Record Payment</span>
                     </button>
                     <button class="qa-btn" onclick="window.location.href='customers.php?action=add'">
-                        <div class="qa-icon">👤</div>
+                        <div class="qa-icon"
+                            style="background:#f3e8ff; border-radius:12px; width:52px; height:52px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-person-plus-fill" style="color:#7c3aed; font-size:22px;"></i>
+                        </div>
                         <span>Add Customer</span>
                     </button>
                     <button class="qa-btn" onclick="window.location.href='vehicles.php?action=add'">
-                        <div class="qa-icon">🚗</div>
+                        <div class="qa-icon"
+                            style="background:#fef3c7; border-radius:12px; width:52px; height:52px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-car-front-fill" style="color:#d97706; font-size:22px;"></i>
+                        </div>
                         <span>Add Vehicle</span>
                     </button>
                     <button class="qa-btn" onclick="window.location.href='products.php?action=add'">
-                        <div class="qa-icon">📦</div>
+                        <div class="qa-icon"
+                            style="background:#ffedd5; border-radius:12px; width:52px; height:52px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-box-seam-fill" style="color:#ea580c; font-size:22px;"></i>
+                        </div>
                         <span>Add Product</span>
                     </button>
                     <button class="qa-btn" onclick="window.location.href='sales.php?action=create'">
-                        <div class="qa-icon">📄</div>
+                        <div class="qa-icon"
+                            style="background:#fee2e2; border-radius:12px; width:52px; height:52px; display:flex; align-items:center; justify-content:center;">
+                            <i class="bi bi-file-earmark-text-fill" style="color:#dc2626; font-size:22px;"></i>
+                        </div>
                         <span>Create Invoice</span>
                     </button>
                 </div>
@@ -1463,9 +1618,9 @@ $isOwner = strtolower($role) === 'owner';
         }
 
         // Close panel when clicking outside
-        document.addEventListener('click', function(e) {
-            const panel  = document.getElementById('notifPanel');
-            const btn    = document.getElementById('notifBtn');
+        document.addEventListener('click', function (e) {
+            const panel = document.getElementById('notifPanel');
+            const btn = document.getElementById('notifBtn');
             if (panel && !panel.contains(e.target) && !btn.contains(e.target)) {
                 panel.classList.remove('open');
             }

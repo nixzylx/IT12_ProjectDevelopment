@@ -68,7 +68,7 @@ $service_types = [
 
 // Process new job order
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    
+
     if ($_POST['action'] === 'create_job_order') {
         $customer_id = intval($_POST['customer_id'] ?? 0);
         $vehicle_id = intval($_POST['vehicle_id'] ?? 0);
@@ -77,20 +77,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $service_type = $conn->real_escape_string($_POST['service_type'] ?? '');
         $notes = $conn->real_escape_string($_POST['notes'] ?? '');
         $customer_complaint = $conn->real_escape_string($_POST['customer_complaint'] ?? '');
-        
+
         if ($customer_id && $vehicle_id && $assigned_mechanic && !empty($job_description)) {
-            
+
             $sql = "INSERT INTO job_orders (
                 customer_id, vehicle_id, assigned_mechanic, job_description, service_type, 
                 notes, customer_complaint, status, date_received
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())";
-            
+
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("iiissss", 
-                $customer_id, $vehicle_id, $assigned_mechanic, $job_description, $service_type,
-                $notes, $customer_complaint
+            $stmt->bind_param(
+                "iiissss",
+                $customer_id,
+                $vehicle_id,
+                $assigned_mechanic,
+                $job_description,
+                $service_type,
+                $notes,
+                $customer_complaint
             );
-            
+
             if ($stmt->execute()) {
                 $job_order_id = $conn->insert_id;
                 $successMsg = "Job Order #" . str_pad($job_order_id, 5, '0', STR_PAD_LEFT) . " created successfully!";
@@ -102,15 +108,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $errorMsg = "Please fill in all required fields.";
         }
     }
-    
+
     // Update job status
     if ($_POST['action'] === 'update_status') {
         $job_order_id = intval($_POST['job_order_id'] ?? 0);
         $new_status = $conn->real_escape_string($_POST['status'] ?? '');
         $repair_notes = $conn->real_escape_string($_POST['repair_notes'] ?? '');
-        
+
         if ($job_order_id && $new_status) {
-            
+
             if ($new_status === 'Completed') {
                 // When completed, redirect to create transaction
                 $_SESSION['completed_job_id'] = $job_order_id;
@@ -121,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $update_sql = "UPDATE job_orders SET status = '$new_status',
                                repair_notes = CONCAT(IFNULL(repair_notes, ''), '\nStarted: ', NOW(), ' - ', '$repair_notes')
                                WHERE job_order_id = $job_order_id";
-                
+
                 if ($conn->query($update_sql)) {
                     $successMsg = "Job Order #" . str_pad($job_order_id, 5, '0', STR_PAD_LEFT) . " status updated to $new_status.";
                 } else {
@@ -129,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
             } else {
                 $update_sql = "UPDATE job_orders SET status = '$new_status' WHERE job_order_id = $job_order_id";
-                
+
                 if ($conn->query($update_sql)) {
                     $successMsg = "Job Order #" . str_pad($job_order_id, 5, '0', STR_PAD_LEFT) . " status updated to $new_status.";
                 } else {
@@ -238,6 +244,7 @@ if (isset($_GET['view'])) {
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -245,28 +252,45 @@ if (isset($_GET['view'])) {
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
-        .content { padding: 24px 28px; }
-        
+        .content {
+            padding: 24px 28px;
+        }
+
         .job-stats {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 16px;
             margin-bottom: 28px;
         }
-        
+
         .stat-card {
             background: #fff;
             border-radius: var(--card-radius);
             padding: 20px 18px;
             border: 1px solid var(--border);
         }
-        
-        .stat-card.pending { border-left: 4px solid #f97316; }
-        .stat-card.ongoing { border-left: 4px solid #3b82f6; }
-        .stat-card.completed { border-left: 4px solid #10b981; }
-        .stat-card.cancelled { border-left: 4px solid #ef4444; }
-        .stat-card.total { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; }
-        
+
+        .stat-card.pending {
+            border-left: 4px solid #f97316;
+        }
+
+        .stat-card.ongoing {
+            border-left: 4px solid #3b82f6;
+        }
+
+        .stat-card.completed {
+            border-left: 4px solid #10b981;
+        }
+
+        .stat-card.cancelled {
+            border-left: 4px solid #ef4444;
+        }
+
+        .stat-card.total {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+        }
+
         .stat-label {
             font-size: 12px;
             color: var(--muted);
@@ -274,17 +298,19 @@ if (isset($_GET['view'])) {
             letter-spacing: .5px;
             margin-bottom: 4px;
         }
-        
+
         .stat-value {
             font-family: "Syne", sans-serif;
             font-size: 26px;
             font-weight: 700;
             line-height: 1.2;
         }
-        
+
         .stat-card.total .stat-label,
-        .stat-card.total .stat-value { color: #fff; }
-        
+        .stat-card.total .stat-value {
+            color: #fff;
+        }
+
         .toolbar {
             display: flex;
             align-items: center;
@@ -296,13 +322,13 @@ if (isset($_GET['view'])) {
             border-radius: var(--card-radius);
             border: 1px solid var(--border);
         }
-        
+
         .search-box {
             flex: 2;
             min-width: 250px;
             position: relative;
         }
-        
+
         .search-box i {
             position: absolute;
             left: 12px;
@@ -310,7 +336,7 @@ if (isset($_GET['view'])) {
             transform: translateY(-50%);
             color: #aaa;
         }
-        
+
         .search-box input {
             width: 100%;
             padding: 9px 12px 9px 36px;
@@ -318,23 +344,38 @@ if (isset($_GET['view'])) {
             border-radius: 8px;
             font-size: 13px;
         }
-        
+
         .filter-group {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
         }
-        
-        .filter-group select,
+
+        .filter-group select {
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 12px;
+            padding-right: 36px;
+        }
+
         .filter-group input[type=date] {
             padding: 9px 12px;
             border: 1px solid var(--border);
             border-radius: 8px;
             font-size: 13px;
             background: #fff;
-            min-width: 140px;
+            cursor: pointer;
+            appearance: none;
         }
-        
+
         .btn-primary {
             background: var(--accent);
             color: #fff;
@@ -348,17 +389,17 @@ if (isset($_GET['view'])) {
             align-items: center;
             gap: 6px;
         }
-        
+
         .btn-success {
             background: #10b981;
             color: #fff;
         }
-        
+
         .btn-warning {
             background: #f97316;
             color: #fff;
         }
-        
+
         .btn-outline {
             background: #fff;
             color: var(--text);
@@ -368,7 +409,7 @@ if (isset($_GET['view'])) {
             font-size: 13px;
             cursor: pointer;
         }
-        
+
         .job-table {
             background: #fff;
             border-radius: var(--card-radius);
@@ -376,12 +417,12 @@ if (isset($_GET['view'])) {
             overflow: hidden;
             margin-bottom: 24px;
         }
-        
+
         .job-table table {
             width: 100%;
             border-collapse: collapse;
         }
-        
+
         .job-table thead th {
             background: #f9fafb;
             padding: 14px 16px;
@@ -392,28 +433,28 @@ if (isset($_GET['view'])) {
             font-weight: 600;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .job-table tbody tr {
             border-bottom: 1px solid #f3f4f6;
             transition: background .15s;
             cursor: pointer;
         }
-        
+
         .job-table tbody tr:hover {
             background: #f9fafb;
         }
-        
+
         .job-table td {
             padding: 14px 16px;
             font-size: 13px;
         }
-        
+
         .job-id {
             font-family: "Syne", sans-serif;
             font-weight: 700;
             color: var(--accent);
         }
-        
+
         .status-badge {
             display: inline-block;
             padding: 4px 12px;
@@ -421,24 +462,41 @@ if (isset($_GET['view'])) {
             font-size: 11px;
             font-weight: 600;
         }
-        
-        .status-pending { background: #fef3c7; color: #92400e; }
-        .status-ongoing { background: #dbeafe; color: #1e40af; }
-        .status-completed { background: #dcfce7; color: #166534; }
-        .status-cancelled { background: #fee2e2; color: #991b1b; }
-        
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-ongoing {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-completed {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-cancelled {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
         .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,.45);
+            background: rgba(0, 0, 0, .45);
             z-index: 1000;
             align-items: center;
             justify-content: center;
         }
-        
-        .modal-overlay.open { display: flex; }
-        
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
         .modal {
             background: #fff;
             border-radius: 16px;
@@ -448,11 +506,13 @@ if (isset($_GET['view'])) {
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
         }
-        
-        .modal.large { width: 900px; }
-        
+
+        .modal.large {
+            width: 900px;
+        }
+
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -460,7 +520,7 @@ if (isset($_GET['view'])) {
             padding: 20px 24px;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .modal-header h2 {
             font-family: "Syne", sans-serif;
             font-size: 18px;
@@ -468,7 +528,7 @@ if (isset($_GET['view'])) {
             align-items: center;
             gap: 8px;
         }
-        
+
         .modal-close {
             background: none;
             border: none;
@@ -476,13 +536,13 @@ if (isset($_GET['view'])) {
             cursor: pointer;
             color: #888;
         }
-        
+
         .modal-body {
             padding: 24px;
             overflow-y: auto;
             flex: 1;
         }
-        
+
         .modal-footer {
             padding: 16px 24px;
             border-top: 1px solid var(--border);
@@ -490,20 +550,20 @@ if (isset($_GET['view'])) {
             justify-content: flex-end;
             gap: 10px;
         }
-        
+
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
             margin-bottom: 16px;
         }
-        
+
         .form-group {
             display: flex;
             flex-direction: column;
             gap: 6px;
         }
-        
+
         .form-group label {
             font-size: 12px;
             font-weight: 600;
@@ -511,9 +571,8 @@ if (isset($_GET['view'])) {
             text-transform: uppercase;
             letter-spacing: .4px;
         }
-        
+
         .form-group input,
-        .form-group select,
         .form-group textarea {
             padding: 10px 12px;
             border: 1px solid var(--border);
@@ -521,34 +580,49 @@ if (isset($_GET['view'])) {
             font-size: 13px;
             font-family: inherit;
         }
-        
+
+        .form-group select {
+            padding: 10px 36px 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 12px;
+            background-color: #fff;
+            cursor: pointer;
+        }
+
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .1);
         }
-        
+
         .detail-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 20px;
         }
-        
+
         .detail-label {
             font-size: 11px;
             color: var(--muted);
             text-transform: uppercase;
             margin-bottom: 4px;
         }
-        
+
         .detail-value {
             font-size: 14px;
             font-weight: 500;
         }
-        
+
         .info-box {
             background: #f8fafc;
             border-radius: 10px;
@@ -556,7 +630,7 @@ if (isset($_GET['view'])) {
             margin-bottom: 16px;
             border: 1px solid var(--border);
         }
-        
+
         .page-alert {
             padding: 12px 16px;
             border-radius: 8px;
@@ -566,19 +640,19 @@ if (isset($_GET['view'])) {
             align-items: center;
             gap: 8px;
         }
-        
+
         .page-alert.success {
             background: #d1fae5;
             color: #065f46;
             border: 1px solid #a7f3d0;
         }
-        
+
         .page-alert.error {
             background: #fee2e2;
             color: #991b1b;
             border: 1px solid #fecaca;
         }
-        
+
         .job-detail-view {
             background: #fff;
             border-radius: var(--card-radius);
@@ -586,7 +660,7 @@ if (isset($_GET['view'])) {
             padding: 24px;
             margin-bottom: 24px;
         }
-        
+
         .detail-header {
             display: flex;
             justify-content: space-between;
@@ -595,18 +669,18 @@ if (isset($_GET['view'])) {
             padding-bottom: 16px;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .detail-title {
             font-family: "Syne", sans-serif;
             font-size: 20px;
             font-weight: 700;
         }
-        
+
         .detail-subtitle {
             color: var(--muted);
             font-size: 13px;
         }
-        
+
         .back-btn {
             display: inline-flex;
             align-items: center;
@@ -619,71 +693,29 @@ if (isset($_GET['view'])) {
             font-size: 13px;
             font-weight: 500;
         }
-        
+
         .back-btn:hover {
             background: #e5e7eb;
         }
-        
+
         @media (max-width: 1024px) {
             .job-stats {
                 grid-template-columns: repeat(2, 1fr);
             }
+
             .form-row {
                 grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
+
 <body>
-    <aside class="sidebar">
-        <div class="logo">
-            <a href="admin_dashboard.php" class="logo-container">
-                <div class="logo-mark">
-                    <img src="AB logo.png" alt="AutoBert Logo" class="logo-img">
-                </div>
-                <div class="logo-text-wrapper">
-                    <div class="logo-name">AutoBert</div>
-                    <div class="logo-sub">Repair Shop &amp; Batteries</div>
-                </div>
-            </a>
-        </div>
-
-        <nav class="nav-section">
-            <div class="nav-label">Main</div>
-            <a class="nav-item" href="admin_dashboard.php"><i class="bi bi-speedometer2"></i> Dashboard</a>
-            <a class="nav-item active" href="job_orders.php"><i class="bi bi-clipboard-data"></i> Job Orders</a>
-            <a class="nav-item" href="sales.php"><i class="bi bi-currency-dollar"></i> Sales</a>
-            <a class="nav-item" href="payments.php"><i class="bi bi-credit-card"></i> Payments</a>
-            <a class="nav-item" href="products.php"><i class="bi bi-box-seam"></i> Products</a>
-        </nav>
-
-        <nav class="nav-section">
-            <div class="nav-label">Management</div>
-            <a class="nav-item" href="customers.php"><i class="bi bi-people"></i> Customers</a>
-            <a class="nav-item" href="vehicles.php"><i class="bi bi-truck"></i> Vehicles</a>
-            <?php if ($isOwner): ?>
-                <a class="nav-item" href="employees.php"><i class="bi bi-person-badge"></i> Employees</a>
-                <a class="nav-item" href="admin_approvals.php"><i class="bi bi-check-circle"></i> Approvals</a>
-            <?php endif; ?>
-            <a class="nav-item" href="warranties.php"><i class="bi bi-shield-check"></i> Warranties</a>
-            <a class="nav-item" href="credit_accounts.php"><i class="bi bi-wallet2"></i> Credit Accounts</a>
-        </nav>
-
-        <div class="sidebar-footer">
-            <div class="user-row">
-                <div class="avatar"><?= $userInitials ?></div>
-                <div>
-                    <div class="user-name"><?= $firstname ?></div>
-                    <div class="user-role"><?= htmlspecialchars($role) ?></div>
-                </div>
-            </div>
-            <div style="margin-top:10px; text-align:center;">
-                <a href="logout.php" style="color:var(--sidebar-text); text-decoration:none; font-size:12px;">
-                    <i class="bi bi-box-arrow-right"></i> Logout
-                </a>
-            </div>
-        </div>
-    </aside>
+    <?php
+    $currentPage = 'job_orders.php';
+    $userRoleLabel = htmlspecialchars($role);
+    include 'sidebar.php';
+    ?>
 
     <main class="main">
         <header class="topbar">
@@ -703,9 +735,11 @@ if (isset($_GET['view'])) {
 
         <div class="content">
             <?php if ($successMsg): ?>
-                <div class="page-alert success"><i class="bi bi-check-circle-fill"></i> <?= htmlspecialchars($successMsg) ?></div>
+                <div class="page-alert success"><i class="bi bi-check-circle-fill"></i> <?= htmlspecialchars($successMsg) ?>
+                </div>
             <?php elseif ($errorMsg): ?>
-                <div class="page-alert error"><i class="bi bi-exclamation-triangle-fill"></i> <?= htmlspecialchars($errorMsg) ?></div>
+                <div class="page-alert error"><i class="bi bi-exclamation-triangle-fill"></i>
+                    <?= htmlspecialchars($errorMsg) ?></div>
             <?php endif; ?>
 
             <?php if ($selected_job): ?>
@@ -713,73 +747,86 @@ if (isset($_GET['view'])) {
                 <div class="job-detail-view">
                     <div class="detail-header">
                         <div>
-                            <div class="detail-title">Job Order #<?= str_pad($selected_job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></div>
-                            <div class="detail-subtitle">Created on <?= date('F d, Y \a\t h:i A', strtotime($selected_job['date_received'])) ?></div>
+                            <div class="detail-title">Job Order
+                                #<?= str_pad($selected_job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></div>
+                            <div class="detail-subtitle">Created on
+                                <?= date('F d, Y \a\t h:i A', strtotime($selected_job['date_received'])) ?>
+                            </div>
                         </div>
                         <a href="job_orders.php" class="back-btn"><i class="bi bi-arrow-left"></i> Back to List</a>
                     </div>
-                    
+
                     <div class="detail-grid">
                         <div class="info-box">
                             <div class="detail-label">Customer Information</div>
                             <div class="detail-value"><?= htmlspecialchars($selected_job['customer_name']) ?></div>
                             <div style="font-size:12px; margin-top:8px;">
-                                <div><i class="bi bi-telephone"></i> <?= htmlspecialchars($selected_job['contact_number']) ?></div>
-                                <div><i class="bi bi-envelope"></i> <?= htmlspecialchars($selected_job['email'] ?? 'N/A') ?></div>
+                                <div><i class="bi bi-telephone"></i>
+                                    <?= htmlspecialchars($selected_job['contact_number']) ?></div>
+                                <div><i class="bi bi-envelope"></i> <?= htmlspecialchars($selected_job['email'] ?? 'N/A') ?>
+                                </div>
                             </div>
                         </div>
-                        
+
                         <div class="info-box">
                             <div class="detail-label">Vehicle Information</div>
-                            <div class="detail-value"><?= htmlspecialchars($selected_job['brand'] . ' ' . $selected_job['model']) ?></div>
+                            <div class="detail-value">
+                                <?= htmlspecialchars($selected_job['brand'] . ' ' . $selected_job['model']) ?>
+                            </div>
                             <div style="font-size:12px; margin-top:8px;">
                                 <div>Plate: <?= htmlspecialchars($selected_job['plate_number']) ?></div>
                                 <div>Year: <?= htmlspecialchars($selected_job['year_model']) ?></div>
                             </div>
                         </div>
-                        
+
                         <div class="info-box">
                             <div class="detail-label">Job Details</div>
-                            <div><strong>Service:</strong> <?= htmlspecialchars($selected_job['service_type'] ?? 'N/A') ?></div>
-                            <div><strong>Mechanic:</strong> <?= htmlspecialchars($selected_job['mechanic_name'] ?? 'Unassigned') ?></div>
-                            <div><strong>Status:</strong> <span class="status-badge status-<?= strtolower($selected_job['status']) ?>"><?= $selected_job['status'] ?></span></div>
+                            <div><strong>Service:</strong> <?= htmlspecialchars($selected_job['service_type'] ?? 'N/A') ?>
+                            </div>
+                            <div><strong>Mechanic:</strong>
+                                <?= htmlspecialchars($selected_job['mechanic_name'] ?? 'Unassigned') ?></div>
+                            <div><strong>Status:</strong> <span
+                                    class="status-badge status-<?= strtolower($selected_job['status']) ?>"><?= $selected_job['status'] ?></span>
+                            </div>
                         </div>
-                        
+
                         <div class="info-box">
                             <div class="detail-label">Dates</div>
-                            <div><strong>Received:</strong> <?= date('M d, Y h:i A', strtotime($selected_job['date_received'])) ?></div>
+                            <div><strong>Received:</strong>
+                                <?= date('M d, Y h:i A', strtotime($selected_job['date_received'])) ?></div>
                             <?php if ($selected_job['date_completed']): ?>
-                                <div><strong>Completed:</strong> <?= date('M d, Y h:i A', strtotime($selected_job['date_completed'])) ?></div>
+                                <div><strong>Completed:</strong>
+                                    <?= date('M d, Y h:i A', strtotime($selected_job['date_completed'])) ?></div>
                             <?php endif; ?>
                         </div>
-                        
+
                         <?php if (!empty($selected_job['customer_complaint'])): ?>
-                        <div class="info-box" style="grid-column: span 2;">
-                            <div class="detail-label">Customer Complaint</div>
-                            <div><?= nl2br(htmlspecialchars($selected_job['customer_complaint'])) ?></div>
-                        </div>
+                            <div class="info-box" style="grid-column: span 2;">
+                                <div class="detail-label">Customer Complaint</div>
+                                <div><?= nl2br(htmlspecialchars($selected_job['customer_complaint'])) ?></div>
+                            </div>
                         <?php endif; ?>
-                        
+
                         <div class="info-box" style="grid-column: span 2;">
                             <div class="detail-label">Job Description</div>
                             <div><?= nl2br(htmlspecialchars($selected_job['job_description'])) ?></div>
                         </div>
-                        
+
                         <?php if (!empty($selected_job['repair_notes'])): ?>
-                        <div class="info-box" style="grid-column: span 2;">
-                            <div class="detail-label">Repair Notes</div>
-                            <div><?= nl2br(htmlspecialchars($selected_job['repair_notes'])) ?></div>
-                        </div>
+                            <div class="info-box" style="grid-column: span 2;">
+                                <div class="detail-label">Repair Notes</div>
+                                <div><?= nl2br(htmlspecialchars($selected_job['repair_notes'])) ?></div>
+                            </div>
                         <?php endif; ?>
-                        
+
                         <?php if (!empty($selected_job['notes'])): ?>
-                        <div class="info-box" style="grid-column: span 2;">
-                            <div class="detail-label">Additional Notes</div>
-                            <div><?= nl2br(htmlspecialchars($selected_job['notes'])) ?></div>
-                        </div>
+                            <div class="info-box" style="grid-column: span 2;">
+                                <div class="detail-label">Additional Notes</div>
+                                <div><?= nl2br(htmlspecialchars($selected_job['notes'])) ?></div>
+                            </div>
                         <?php endif; ?>
                     </div>
-                    
+
                     <?php if ($selected_job['status'] === 'Ongoing'): ?>
                         <div style="margin-top: 20px; text-align: right;">
                             <button class="btn-success" onclick="completeJob(<?= $selected_job['job_order_id'] ?>)">
@@ -819,19 +866,22 @@ if (isset($_GET['view'])) {
                 <form method="GET" style="display: flex; gap: 12px; width: 100%; flex-wrap: wrap;">
                     <div class="search-box">
                         <i class="bi bi-search"></i>
-                        <input type="text" name="search" placeholder="Search customer, plate, description..." 
-                               value="<?= htmlspecialchars($filter_search) ?>">
+                        <input type="text" name="search" placeholder="Search customer, plate, description..."
+                            value="<?= htmlspecialchars($filter_search) ?>">
                     </div>
                     <div class="filter-group">
                         <select name="status">
                             <option value="all" <?= $filter_status === 'all' ? 'selected' : '' ?>>All Status</option>
                             <option value="Pending" <?= $filter_status === 'Pending' ? 'selected' : '' ?>>Pending</option>
                             <option value="Ongoing" <?= $filter_status === 'Ongoing' ? 'selected' : '' ?>>Ongoing</option>
-                            <option value="Completed" <?= $filter_status === 'Completed' ? 'selected' : '' ?>>Completed</option>
-                            <option value="Cancelled" <?= $filter_status === 'Cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                            <option value="Completed" <?= $filter_status === 'Completed' ? 'selected' : '' ?>>Completed
+                            </option>
+                            <option value="Cancelled" <?= $filter_status === 'Cancelled' ? 'selected' : '' ?>>Cancelled
+                            </option>
                         </select>
                         <input type="date" name="date_from" value="<?= $filter_date_from ?>">
-                        <span>to</span>
+                        <span
+                            style="font-size:13px; color:var(--muted); white-space:nowrap; align-self:center;">to</span>
                         <input type="date" name="date_to" value="<?= $filter_date_to ?>">
                         <button type="submit" class="btn-primary"><i class="bi bi-funnel"></i> Filter</button>
                         <?php if ($filter_status !== 'all' || !empty($filter_search) || $filter_customer > 0): ?>
@@ -861,18 +911,22 @@ if (isset($_GET['view'])) {
                                 <td colspan="7" style="text-align: center; padding: 48px;">
                                     <i class="bi bi-clipboard-x" style="font-size: 48px; color: #ccc;"></i>
                                     <p style="margin-top: 16px; color: #666;">No job orders found</p>
-                                    <button class="btn-primary" onclick="openModal('newJobModal')">Create First Job Order</button>
+                                    <button class="btn-primary" onclick="openModal('newJobModal')">Create First Job
+                                        Order</button>
                                 </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($job_orders as $job): 
+                            <?php foreach ($job_orders as $job):
                                 $status_class = 'status-' . strtolower($job['status']);
-                            ?>
+                                ?>
                                 <tr onclick="viewJobDetails(<?= $job['job_order_id'] ?>)">
-                                    <td><span class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span></td>
+                                    <td><span class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
+                                    </td>
                                     <td>
                                         <div><?= htmlspecialchars($job['customer_name'] ?? '—') ?></div>
-                                        <div style="font-size: 11px; color: #666;"><?= htmlspecialchars($job['vehicle_info'] ?? '') ?></div>
+                                        <div style="font-size: 11px; color: #666;">
+                                            <?= htmlspecialchars($job['vehicle_info'] ?? '') ?>
+                                        </div>
                                     </td>
                                     <td><?= htmlspecialchars($job['service_type'] ?? '—') ?></td>
                                     <td><?= htmlspecialchars($job['mechanic_name'] ?? 'Unassigned') ?></td>
@@ -880,15 +934,18 @@ if (isset($_GET['view'])) {
                                     <td><?= date('M d, Y', strtotime($job['date_received'])) ?></td>
                                     <td onclick="event.stopPropagation()">
                                         <?php if ($job['status'] === 'Pending'): ?>
-                                            <button class="btn-primary" style="padding: 5px 10px;" onclick="updateStatus(<?= $job['job_order_id'] ?>, 'Ongoing')">
+                                            <button class="btn-primary" style="padding: 5px 10px;"
+                                                onclick="updateStatus(<?= $job['job_order_id'] ?>, 'Ongoing')">
                                                 <i class="bi bi-play"></i> Start
                                             </button>
                                         <?php elseif ($job['status'] === 'Ongoing'): ?>
-                                            <button class="btn-success" style="padding: 5px 10px;" onclick="completeJob(<?= $job['job_order_id'] ?>)">
+                                            <button class="btn-success" style="padding: 5px 10px;"
+                                                onclick="completeJob(<?= $job['job_order_id'] ?>)">
                                                 <i class="bi bi-check"></i> Complete
                                             </button>
                                         <?php elseif ($job['status'] === 'Completed'): ?>
-                                            <button class="btn-outline" style="padding: 5px 10px;" onclick="createTransaction(<?= $job['job_order_id'] ?>)">
+                                            <button class="btn-outline" style="padding: 5px 10px;"
+                                                onclick="createTransaction(<?= $job['job_order_id'] ?>)">
                                                 <i class="bi bi-cash"></i> Create Transaction
                                             </button>
                                         <?php endif; ?>
@@ -919,7 +976,9 @@ if (isset($_GET['view'])) {
                             <select name="customer_id" id="customer_select" required onchange="loadCustomerVehicles()">
                                 <option value="">Select Customer</option>
                                 <?php foreach ($customers as $c): ?>
-                                    <option value="<?= $c['customer_id'] ?>"><?= htmlspecialchars($c['first_name'] . ' ' . $c['last_name']) ?></option>
+                                    <option value="<?= $c['customer_id'] ?>">
+                                        <?= htmlspecialchars($c['first_name'] . ' ' . $c['last_name']) ?>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -952,7 +1011,9 @@ if (isset($_GET['view'])) {
                             <select name="assigned_mechanic" required>
                                 <option value="">Select Mechanic</option>
                                 <?php foreach ($mechanics as $m): ?>
-                                    <option value="<?= $m['employeeID'] ?>"><?= htmlspecialchars($m['first_name'] . ' ' . $m['last_name']) ?></option>
+                                    <option value="<?= $m['employeeID'] ?>">
+                                        <?= htmlspecialchars($m['first_name'] . ' ' . $m['last_name']) ?>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -960,12 +1021,14 @@ if (isset($_GET['view'])) {
 
                     <div class="form-group">
                         <label>Job Description *</label>
-                        <textarea name="job_description" rows="3" required placeholder="Describe the work needed..."></textarea>
+                        <textarea name="job_description" rows="3" required
+                            placeholder="Describe the work needed..."></textarea>
                     </div>
 
                     <div class="form-group">
                         <label>Customer Complaint</label>
-                        <textarea name="customer_complaint" rows="2" placeholder="What did the customer report?"></textarea>
+                        <textarea name="customer_complaint" rows="2"
+                            placeholder="What did the customer report?"></textarea>
                     </div>
 
                     <div class="form-group">
@@ -995,7 +1058,8 @@ if (isset($_GET['view'])) {
                 <div class="modal-body">
                     <div class="form-group">
                         <label>Initial Notes</label>
-                        <textarea name="repair_notes" rows="3" placeholder="Add any initial notes about starting this job..."></textarea>
+                        <textarea name="repair_notes" rows="3"
+                            placeholder="Add any initial notes about starting this job..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1009,7 +1073,7 @@ if (isset($_GET['view'])) {
     <script>
         function openModal(id) { document.getElementById(id).classList.add('open'); }
         function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-        
+
         // Close modals when clicking outside
         document.querySelectorAll('.modal-overlay').forEach(m => {
             m.addEventListener('click', e => {
@@ -1022,7 +1086,7 @@ if (isset($_GET['view'])) {
             const customerId = document.getElementById('customer_select').value;
             const vehicleSelect = document.getElementById('vehicle_select');
             const options = vehicleSelect.querySelectorAll('option');
-            
+
             options.forEach(opt => {
                 if (opt.value === '') return;
                 if (opt.dataset.customer == customerId || customerId === '') {
@@ -1031,7 +1095,7 @@ if (isset($_GET['view'])) {
                     opt.style.display = 'none';
                 }
             });
-            
+
             // Reset selection
             vehicleSelect.value = '';
         }
@@ -1074,7 +1138,7 @@ if (isset($_GET['view'])) {
         }
 
         // Initialize vehicle filtering on page load
-        window.onload = function() {
+        window.onload = function () {
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.has('view')) {
                 // Scroll to top to show details
@@ -1083,4 +1147,5 @@ if (isset($_GET['view'])) {
         };
     </script>
 </body>
+
 </html>

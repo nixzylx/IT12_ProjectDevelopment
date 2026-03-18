@@ -17,7 +17,6 @@ unset($_SESSION['login_error'], $_SESSION['register_success'], $_SESSION['logout
 </head>
 <body class="login">
     <div class="transparentbox">
-        <!-- Brand Header -->
         <div class="brand-header">
             <div class="brand-icon">
                 <i class="bi bi-gear-wide-connected"></i>
@@ -28,7 +27,6 @@ unset($_SESSION['login_error'], $_SESSION['register_success'], $_SESSION['logout
             </div>
         </div>
 
-        <!-- Alert Messages -->
         <?php if (!empty($loginError)): ?>
             <div class="alert error">
                 <i class="bi bi-exclamation-triangle-fill"></i>

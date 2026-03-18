@@ -133,7 +133,9 @@ if ($aj)
     <title>Customers · AutoBert</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@600;700&display=swap" rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Syne:wght@600;700&display=swap"
+        rel="stylesheet" />
 
     <style>
         .filter-bar {
@@ -144,7 +146,9 @@ if ($aj)
             flex-wrap: wrap;
         }
 
-        .filter-bar .search-bar {width: 280px;}
+        .filter-bar .search-bar {
+            width: 280px;
+        }
 
         .filter-bar select {
             padding: 7px 32px 7px 12px;
@@ -278,7 +282,9 @@ if ($aj)
             justify-content: center;
         }
 
-        .modal-overlay.open {display: flex;}
+        .modal-overlay.open {
+            display: flex;
+        }
 
         .modal {
             background: var(--surface);
@@ -320,8 +326,13 @@ if ($aj)
             transition: background .15s;
         }
 
-        .modal-close:hover {background: #eceae6;}
-        .modal-body {padding: 24px;}
+        .modal-close:hover {
+            background: #eceae6;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
 
         .modal-footer {
             padding: 16px 24px;
@@ -339,7 +350,9 @@ if ($aj)
             margin-bottom: 14px;
         }
 
-        .form-row.full {grid-template-columns: 1fr;}
+        .form-row.full {
+            grid-template-columns: 1fr;
+        }
 
         .form-group {
             display: flex;
@@ -386,7 +399,9 @@ if ($aj)
             z-index: 200;
         }
 
-        .drawer-overlay.open {display: block;}
+        .drawer-overlay.open {
+            display: block;
+        }
 
         .drawer {
             position: fixed;
@@ -403,7 +418,9 @@ if ($aj)
             overflow-y: auto;
         }
 
-        .drawer.open {right: 0;}
+        .drawer.open {
+            right: 0;
+        }
 
         .drawer-header {
             padding: 24px 24px 16px;
@@ -413,7 +430,10 @@ if ($aj)
             justify-content: space-between;
         }
 
-        .drawer-body {padding: 24px; flex: 1;}
+        .drawer-body {
+            padding: 24px;
+            flex: 1;
+        }
 
         .profile-hero {
             display: flex;
@@ -546,16 +566,41 @@ if ($aj)
             margin-top: 2px;
         }
 
-        .ac-0 {background: #2563eb;}
-        .ac-1 {background: #16a34a;}
-        .ac-2 {background: #dc2626;}
-        .ac-3 {background: #9333ea;}
-        .ac-4 {background: #f97316;}
-        .ac-5 {background: #0891b2;}
-        .ac-6 {background: #be185d;}
-        .ac-7 {background: #854d0e;}
+        .ac-0 {
+            background: #2563eb;
+        }
 
-        .confirm-modal {width: 400px;}
+        .ac-1 {
+            background: #16a34a;
+        }
+
+        .ac-2 {
+            background: #dc2626;
+        }
+
+        .ac-3 {
+            background: #9333ea;
+        }
+
+        .ac-4 {
+            background: #f97316;
+        }
+
+        .ac-5 {
+            background: #0891b2;
+        }
+
+        .ac-6 {
+            background: #be185d;
+        }
+
+        .ac-7 {
+            background: #854d0e;
+        }
+
+        .confirm-modal {
+            width: 400px;
+        }
 
         .confirm-icon {
             width: 48px;
@@ -584,13 +629,15 @@ if ($aj)
 
 <body>
 
-    <?php include 'approval_page.php'; ?>
+    <?php
+    $currentPage = 'customers.php';
+    include 'approval_page.php';
+    ?>
 
     <div class="main">
         <div class="topbar">
             <div class="topbar-left">
                 <span class="page-title">Customers</span>
-                <span class="breadcrumb" style="margin-left:8px;">/ <?= count($customers) ?> records</span>
             </div>
             <div class="topbar-right">
                 <div class="search-bar">
@@ -692,7 +739,8 @@ if ($aj)
                                             <?php endif; ?>
                                             <?php if ($c['contact_number']): ?>
                                                 <div style="font-size:12px; color:var(--muted);">
-                                                    <?= htmlspecialchars($c['contact_number']) ?></div>
+                                                    <?= htmlspecialchars($c['contact_number']) ?>
+                                                </div>
                                             <?php endif; ?>
                                             <?php if (!$c['email'] && !$c['contact_number']): ?>
                                                 <span style="color:var(--muted); font-size:12px;">—</span>

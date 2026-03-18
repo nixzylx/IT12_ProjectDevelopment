@@ -1,5 +1,5 @@
 <?php
-// credit_accounts.php
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -29,84 +29,71 @@ $firstname = htmlspecialchars($user['first_name'] ?? 'User');
 $userInitials = strtoupper(substr($firstname, 0, 1) . substr($user['last_name'] ?? '', 0, 1));
 $userRoleLabel = htmlspecialchars($role ?? 'Staff');
 $isOwner = strtolower($role) === 'owner';
-$isBusinessPartner = strtolower($role) === 'business partner';
 
-// Handle form submissions
 $message = '';
 $error = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
-        // Create/Update Credit Account
-        if ($_POST['action'] === 'save' && isset($_POST['customer_id'])) {
-            $customer_id = $_POST['customer_id'];
-            $credit_limit = floatval($_POST['credit_limit']);
-            
-            // Check if account exists
-            $check = $conn->prepare("SELECT credit_id FROM credit_accounts WHERE customer_id = ?");
-            $check->bind_param("i", $customer_id);
-            $check->execute();
-            $check->store_result();
-            
-            if ($check->num_rows > 0) {
-                // Update existing account
-                $stmt = $conn->prepare("UPDATE credit_accounts SET credit_limit = ? WHERE customer_id = ?");
-                $stmt->bind_param("di", $credit_limit, $customer_id);
-            } else {
-                // Create new account
-                $stmt = $conn->prepare("INSERT INTO credit_accounts (customer_id, credit_limit, current_balance) VALUES (?, ?, 0.00)");
-                $stmt->bind_param("id", $customer_id, $credit_limit);
-            }
-            $check->close();
-            
-            if ($stmt->execute()) {
-                $message = "Credit account saved successfully!";
-            } else {
-                $error = "Error saving credit account: " . $conn->error;
-            }
-            $stmt->close();
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    if ($_POST['action'] === 'save' && isset($_POST['customer_id'])) {
+        $customer_id = $_POST['customer_id'];
+        $credit_limit = floatval($_POST['credit_limit']);
+
+        $check = $conn->prepare("SELECT credit_id FROM credit_accounts WHERE customer_id = ?");
+        $check->bind_param("i", $customer_id);
+        $check->execute();
+        $check->store_result();
+
+        if ($check->num_rows > 0) {
+            $stmt = $conn->prepare("UPDATE credit_accounts SET credit_limit = ? WHERE customer_id = ?");
+            $stmt->bind_param("di", $credit_limit, $customer_id);
+        } else {
+            $stmt = $conn->prepare("INSERT INTO credit_accounts (customer_id, credit_limit, current_balance) VALUES (?, ?, 0.00)");
+            $stmt->bind_param("id", $customer_id, $credit_limit);
         }
-        
-        // Record Payment
-        if ($_POST['action'] === 'payment' && isset($_POST['credit_id'])) {
-            $credit_id = $_POST['credit_id'];
-            $payment_amount = floatval($_POST['payment_amount']);
-            
-            // Update balance
-            $stmt = $conn->prepare("UPDATE credit_accounts SET current_balance = current_balance - ?, last_payment_date = CURDATE() WHERE credit_id = ? AND current_balance >= ?");
-            $stmt->bind_param("dii", $payment_amount, $credit_id, $payment_amount);
-            
-            if ($stmt->execute() && $stmt->affected_rows > 0) {
-                $message = "Payment recorded successfully!";
-            } else {
-                $error = "Error recording payment or insufficient balance.";
-            }
-            $stmt->close();
+        $check->close();
+
+        if ($stmt->execute()) {
+            $message = "Credit account saved successfully!";
+        } else {
+            $error = "Error saving credit account: " . $conn->error;
         }
-        
-        // Adjust Balance
-        if ($_POST['action'] === 'adjust' && isset($_POST['credit_id']) && $isOwner) {
-            $credit_id = $_POST['credit_id'];
-            $new_balance = floatval($_POST['new_balance']);
-            
-            $stmt = $conn->prepare("UPDATE credit_accounts SET current_balance = ? WHERE credit_id = ?");
-            $stmt->bind_param("di", $new_balance, $credit_id);
-            
-            if ($stmt->execute()) {
-                $message = "Balance adjusted successfully!";
-            } else {
-                $error = "Error adjusting balance: " . $conn->error;
-            }
-            $stmt->close();
+        $stmt->close();
+    }
+
+    if ($_POST['action'] === 'payment' && isset($_POST['credit_id'])) {
+        $credit_id = $_POST['credit_id'];
+        $payment_amount = floatval($_POST['payment_amount']);
+
+        $stmt = $conn->prepare("UPDATE credit_accounts SET current_balance = current_balance - ?, last_payment_date = CURDATE() WHERE credit_id = ? AND current_balance >= ?");
+        $stmt->bind_param("dii", $payment_amount, $credit_id, $payment_amount);
+
+        if ($stmt->execute() && $stmt->affected_rows > 0) {
+            $message = "Payment recorded successfully!";
+        } else {
+            $error = "Error recording payment or insufficient balance.";
         }
+        $stmt->close();
+    }
+
+    if ($_POST['action'] === 'adjust' && isset($_POST['credit_id']) && $isOwner) {
+        $credit_id = $_POST['credit_id'];
+        $new_balance = floatval($_POST['new_balance']);
+
+        $stmt = $conn->prepare("UPDATE credit_accounts SET current_balance = ? WHERE credit_id = ?");
+        $stmt->bind_param("di", $new_balance, $credit_id);
+
+        if ($stmt->execute()) {
+            $message = "Balance adjusted successfully!";
+        } else {
+            $error = "Error adjusting balance: " . $conn->error;
+        }
+        $stmt->close();
     }
 }
 
-// Get filter parameters
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
-// Build WHERE clause
 $where = [];
 $params = [];
 $types = '';
@@ -130,7 +117,6 @@ if ($status_filter === 'has_balance') {
 
 $where_clause = !empty($where) ? "WHERE " . implode(" AND ", $where) : "";
 
-// Get credit accounts with customer details
 $query = "
     SELECT 
         ca.*,
@@ -162,7 +148,6 @@ $query = "
 
 $creditAccounts = $conn->query($query)->fetch_all(MYSQLI_ASSOC);
 
-// Get customers without credit accounts for dropdown
 $customersWithoutAccount = $conn->query("
     SELECT c.customer_id, c.first_name, c.last_name 
     FROM customers c 
@@ -171,17 +156,17 @@ $customersWithoutAccount = $conn->query("
     ORDER BY c.first_name
 ")->fetch_all(MYSQLI_ASSOC);
 
-// Calculate totals
 $totalOutstanding = array_sum(array_column($creditAccounts, 'current_balance'));
 $totalCreditLimit = array_sum(array_column($creditAccounts, 'credit_limit'));
 $averageUsage = $totalCreditLimit > 0 ? ($totalOutstanding / $totalCreditLimit * 100) : 0;
-$accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
+$accountsOverLimit = count(array_filter($creditAccounts, function ($acc) {
     return $acc['current_balance'] > $acc['credit_limit'];
 }));
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -195,49 +180,54 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             gap: 16px;
             margin-bottom: 24px;
         }
-        
+
         .stat-card {
             background: #fff;
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
             border: 1px solid var(--border);
         }
-        
+
         .stat-value {
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 4px;
-            color: var(--accent);
+            color: var(--text);
         }
-        
+
         .stat-label {
             color: var(--muted);
             font-size: 13px;
         }
-        
+
         .stat-sub {
             font-size: 12px;
             color: var(--muted);
             margin-top: 8px;
         }
-        
+
         .filter-section {
-            background: #f9fafb;
+            background: #fff;
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 24px;
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            align-items: flex-end;
+            border: 1px solid var(--border);
         }
-        
+
+        .filter-section form {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+            align-items: flex-end;
+            justify-content: space-between;
+        }
+
         .filter-group {
             flex: 1;
-            min-width: 200px;
+            min-width: 0;
         }
-        
+
         .filter-group label {
             display: block;
             font-size: 12px;
@@ -245,21 +235,82 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             margin-bottom: 6px;
             color: var(--text);
         }
-        
-        .filter-group select,
-        .filter-group input {
+
+        .filter-group select {
             width: 100%;
-            padding: 8px 12px;
+            padding: 9px 12px;
             border: 1px solid var(--border);
             border-radius: 8px;
             font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 12px;
+            padding-right: 36px;
+            box-sizing: border-box;
         }
-        
+
+        .filter-group input {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+            box-sizing: border-box;
+            appearance: none;
+        }
+
         .filter-actions {
             display: flex;
             gap: 8px;
+            align-items: flex-end;
+            flex-shrink: 0;
         }
-        
+
+        .filter-actions .btn-primary {
+            padding: 8px 16px;
+            font-size: 13px;
+            border-radius: 20px; 
+            background: var(--accent) !important;
+            color: #fff !important;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            font-weight: 500;
+            transform: none !important;
+            transition: background 0.15s;
+        }
+
+        .filter-actions .btn-primary:hover,
+        .filter-actions .btn-primary:active,
+        .filter-actions .btn-primary:focus {
+            background: var(--accent-hover) !important;
+            color: #fff !important;
+            transform: none !important;
+            opacity: 1 !important;
+        }
+
+        .btn-clear {
+            padding: 8px 16px;
+            border: 1.5px solid #d1d5db;
+            border-radius: 15px;
+            font-size: 13px;
+            font-weight: 500;
+            background: #fff;
+            color: var(--text);
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            transition: all 0.15s;
+        }
+
         .account-status {
             display: inline-block;
             padding: 4px 12px;
@@ -267,27 +318,27 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             font-size: 11px;
             font-weight: 600;
         }
-        
+
         .status-normal {
             background: #10b98120;
             color: #10b981;
         }
-        
+
         .status-near-limit {
             background: #f59e0b20;
             color: #f59e0b;
         }
-        
+
         .status-over-limit {
             background: #ef444420;
             color: #ef4444;
         }
-        
+
         .status-zero {
             background: #6b728020;
             color: #6b7280;
         }
-        
+
         .progress-bar {
             width: 100%;
             height: 6px;
@@ -295,17 +346,25 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             border-radius: 3px;
             margin: 8px 0;
         }
-        
+
         .progress-fill {
             height: 100%;
             border-radius: 3px;
             transition: width 0.3s;
         }
-        
-        .progress-fill.normal { background: #10b981; }
-        .progress-fill.warning { background: #f59e0b; }
-        .progress-fill.danger { background: #ef4444; }
-        
+
+        .progress-fill.normal {
+            background: #10b981;
+        }
+
+        .progress-fill.warning {
+            background: #f59e0b;
+        }
+
+        .progress-fill.danger {
+            background: #ef4444;
+        }
+
         .modal {
             display: none;
             position: fixed;
@@ -314,18 +373,18 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.5);
         }
-        
+
         .modal-content {
             background-color: #fff;
             margin: 50px auto;
             padding: 0;
             width: 500px;
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
-        
+
         .modal-header {
             padding: 20px 24px;
             border-bottom: 1px solid var(--border);
@@ -333,13 +392,13 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             justify-content: space-between;
             align-items: center;
         }
-        
+
         .modal-header h3 {
             font-size: 18px;
             font-weight: 600;
             margin: 0;
         }
-        
+
         .modal-close {
             background: none;
             border: none;
@@ -347,22 +406,22 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             cursor: pointer;
             color: var(--muted);
         }
-        
+
         .modal-body {
             padding: 24px;
         }
-        
+
         .modal-footer {
             padding: 16px 24px;
             border-top: 1px solid var(--border);
             text-align: right;
             background: #f9fafb;
         }
-        
+
         .form-group {
             margin-bottom: 20px;
         }
-        
+
         .form-group label {
             display: block;
             font-size: 13px;
@@ -370,7 +429,7 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             margin-bottom: 6px;
             color: var(--text);
         }
-        
+
         .form-group input,
         .form-group select {
             width: 100%;
@@ -379,51 +438,51 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             border-radius: 8px;
             font-size: 14px;
         }
-        
+
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
-        
+
         .btn {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
             cursor: pointer;
             border: none;
             transition: all 0.15s;
         }
-        
+
         .btn-primary {
             background: var(--accent);
             color: #fff;
         }
-        
+
         .btn-primary:hover {
             background: var(--accent-dark);
         }
-        
+
         .btn-secondary {
             background: #e5e7eb;
             color: var(--text);
         }
-        
+
         .btn-secondary:hover {
             background: #d1d5db;
         }
-        
+
         .btn-success {
             background: #10b981;
             color: #fff;
         }
-        
+
         .btn-success:hover {
             background: #059669;
         }
-        
+
         .btn-dashboard {
             background: #4f46e5;
             color: #fff;
@@ -437,17 +496,17 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             border: none;
             cursor: pointer;
         }
-        
+
         .btn-dashboard:hover {
             background: #4338ca;
         }
-        
+
         .action-buttons {
             display: flex;
             gap: 6px;
             flex-wrap: wrap;
         }
-        
+
         .icon-btn-sm {
             padding: 6px 10px;
             border: 1px solid var(--border);
@@ -460,12 +519,12 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             color: var(--text);
             white-space: nowrap;
         }
-        
+
         .icon-btn-sm:hover {
             background: #f9fafb;
             border-color: var(--accent);
         }
-        
+
         .alert {
             padding: 12px 16px;
             border-radius: 8px;
@@ -474,152 +533,65 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             align-items: center;
             gap: 8px;
         }
-        
+
         .alert-success {
             background: #10b98120;
             color: #10b981;
         }
-        
+
         .alert-error {
             background: #ef444420;
             color: #ef4444;
         }
-        
+
         .empty-state {
             text-align: center;
             padding: 40px 20px;
         }
-        
+
         .empty-icon {
             font-size: 48px;
             margin-bottom: 16px;
             opacity: 0.3;
         }
-        
+
         .empty-text {
             color: var(--muted);
             font-size: 14px;
         }
-        
+
         .topbar-right {
             display: flex;
             align-items: center;
             gap: 12px;
         }
-        
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        
-        .badge-warning {
-            background: #f59e0b20;
-            color: #f59e0b;
-        }
-        
+
         .amount {
             font-weight: 600;
             font-size: 15px;
         }
-        
+
         .amount-positive {
             color: #ef4444;
         }
-        
+
         .amount-negative {
             color: #10b981;
         }
-        
+
         .payment-info {
             font-size: 11px;
             color: var(--muted);
         }
     </style>
 </head>
+
 <body>
-    <aside class="sidebar">
-        <div class="logo">
-            <a href="admin_dashboard.php" class="logo-container">
-                <div class="logo-mark">
-                    <img src="AB logo.png" alt="AutoBert Logo" class="logo-img">
-                </div>
-                <div class="logo-text-wrapper">
-                    <div class="logo-name">AutoBert</div>
-                    <div class="logo-sub">Repair Shop &amp; Batteries</div>
-                </div>
-            </a>
-        </div>
 
-        <nav class="nav-section">
-            <div class="nav-label">Main</div>
-            <a class="nav-item" href="admin_dashboard.php">
-                <i class="bi bi-speedometer2"></i> Dashboard
-            </a>
-            <a class="nav-item" href="new_job_order.php">
-                <i class="bi bi-clipboard-data"></i> Job Orders
-            </a>
-            <a class="nav-item" href="sales.php">
-                <i class="bi bi-currency-dollar"></i> Sales
-            </a>
-            <a class="nav-item" href="payments.php">
-                <i class="bi bi-credit-card"></i> Payments
-            </a>
-            <a class="nav-item" href="products.php">
-                <i class="bi bi-box-seam"></i> Products
-            </a>
-        </nav>
-
-        <nav class="nav-section">
-            <div class="nav-label">Management</div>
-            <a class="nav-item" href="customers.php">
-                <i class="bi bi-people"></i> Customers
-            </a>
-            <a class="nav-item" href="vehicles.php">
-                <i class="bi bi-truck"></i> Vehicles
-            </a>
-            <?php if ($isOwner): ?>
-                <a class="nav-item" href="employees.php">
-                    <i class="bi bi-person-badge"></i> Employees
-                </a>
-                <a class="nav-item" href="admin_approvals.php">
-                    <i class="bi bi-check-circle"></i> Approvals
-                </a>
-            <?php endif; ?>
-            <a class="nav-item" href="warranties.php">
-                <i class="bi bi-shield-check"></i> Warranties
-            </a>
-            <a class="nav-item active" href="credit_accounts.php">
-                <i class="bi bi-wallet2"></i> Credit Accounts
-            </a>
-        </nav>
-
-        <?php if ($isOwner || $isBusinessPartner): ?>
-        <nav class="nav-section">
-            <div class="nav-label">Reports</div>
-            <a class="nav-item" href="reports.php">
-                <i class="bi bi-bar-chart-line"></i> Reports
-            </a>
-        </nav>
-        <?php endif; ?>
-
-        <div class="sidebar-footer">
-            <div class="user-row">
-                <div class="avatar"><?= $userInitials ?></div>
-                <div>
-                    <div class="user-name"><?= $firstname ?></div>
-                    <div class="user-role"><?= $userRoleLabel ?></div>
-                </div>
-            </div>
-            <div style="margin-top: 10px; text-align: center;">
-                <a href="logout.php" style="color: var(--sidebar-text); text-decoration: none; font-size: 12px;">
-                    <i class="bi bi-box-arrow-right"></i> Logout
-                </a>
-            </div>
-        </div>
-    </aside>
+    <?php
+    $currentPage = 'credit_accounts.php';
+    include 'approval_page.php';
+    ?>
 
     <main class="main">
         <header class="topbar">
@@ -627,15 +599,14 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                 <span class="page-title">Credit Account Management</span>
                 <span class="breadcrumb">Manage customer credit limits and balances</span>
             </div>
-
             <div class="topbar-right">
                 <button class="btn-dashboard" onclick="window.location.href='admin_dashboard.php'">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </button>
                 <?php if (!empty($customersWithoutAccount)): ?>
-                <button class="btn-primary" onclick="openCreateModal()">
-                    <i class="bi bi-plus-lg"></i> New Credit Account
-                </button>
+                    <button class="btn btn-primary" onclick="openCreateModal()">
+                        <i class="bi bi-plus-lg"></i> New Credit Account
+                    </button>
                 <?php endif; ?>
                 <button class="logout-btn" onclick="window.location.href='logout.php'">
                     <i class="bi bi-box-arrow-right"></i>
@@ -649,7 +620,6 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                     <i class="bi bi-check-circle-fill"></i> <?= htmlspecialchars($message) ?>
                 </div>
             <?php endif; ?>
-
             <?php if ($error): ?>
                 <div class="alert alert-error">
                     <i class="bi bi-exclamation-triangle-fill"></i> <?= htmlspecialchars($error) ?>
@@ -671,7 +641,7 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                 <div class="stat-card">
                     <div class="stat-value"><?= $accountsOverLimit ?></div>
                     <div class="stat-label">Accounts Over Limit</div>
-                    <div class="stat-sub <?= $accountsOverLimit > 0 ? 'status-over-limit' : '' ?>">Requires attention</div>
+                    <div class="stat-sub">Requires attention</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value"><?= count($customersWithoutAccount) ?></div>
@@ -682,24 +652,29 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
 
             <!-- Filter Section -->
             <div class="filter-section">
-                <form method="GET" style="display: flex; gap: 16px; width: 100%; flex-wrap: wrap;">
+                <form method="GET">
                     <div class="filter-group">
                         <label>Status</label>
                         <select name="status">
                             <option value="">All Accounts</option>
-                            <option value="has_balance" <?= $status_filter === 'has_balance' ? 'selected' : '' ?>>With Balance</option>
-                            <option value="zero_balance" <?= $status_filter === 'zero_balance' ? 'selected' : '' ?>>Zero Balance</option>
-                            <option value="near_limit" <?= $status_filter === 'near_limit' ? 'selected' : '' ?>>Near Limit (>80%)</option>
-                            <option value="over_limit" <?= $status_filter === 'over_limit' ? 'selected' : '' ?>>Over Limit</option>
+                            <option value="has_balance" <?= $status_filter === 'has_balance' ? 'selected' : '' ?>>With
+                                Balance</option>
+                            <option value="zero_balance" <?= $status_filter === 'zero_balance' ? 'selected' : '' ?>>Zero
+                                Balance</option>
+                            <option value="near_limit" <?= $status_filter === 'near_limit' ? 'selected' : '' ?>>Near Limit
+                                (&gt;80%)</option>
+                            <option value="over_limit" <?= $status_filter === 'over_limit' ? 'selected' : '' ?>>Over Limit
+                            </option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label>Search</label>
-                        <input type="text" name="search" placeholder="Customer name, email, phone..." value="<?= htmlspecialchars($search) ?>">
+                        <input type="text" name="search" placeholder="Customer name, email, phone..."
+                            value="<?= htmlspecialchars($search) ?>">
                     </div>
                     <div class="filter-actions">
                         <button type="submit" class="btn-primary">Apply Filters</button>
-                        <a href="credit_accounts.php" class="btn-secondary" style="text-decoration: none; display: inline-block; padding: 8px 16px;">Clear</a>
+                        <a href="credit_accounts.php" class="btn-clear">Clear</a>
                     </div>
                 </form>
             </div>
@@ -723,80 +698,89 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                         <?php if (empty($creditAccounts)): ?>
                             <tr>
                                 <td colspan="8">
-                                    <div class="empty-state">
+                                    <div class="empty-state"
+                                        style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px;">
                                         <div class="empty-icon">💳</div>
-                                        <div class="empty-text">No credit accounts found</div>
+                                        <div class="empty-text" style="margin-bottom:16px;">No credit accounts found</div>
                                         <?php if (!empty($customersWithoutAccount)): ?>
-                                            <button class="btn-primary" onclick="openCreateModal()" style="margin-top: 16px;">
-                                                Create First Credit Account
-                                            </button>
+                                            <button class="btn btn-primary" onclick="openCreateModal()">Create First Credit
+                                                Account</button>
                                         <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($creditAccounts as $account): 
+                            <?php foreach ($creditAccounts as $account):
                                 $usage_percent = $account['usage_percent'];
                                 $progress_class = 'normal';
-                                if ($usage_percent > 100) $progress_class = 'danger';
-                                elseif ($usage_percent > 80) $progress_class = 'warning';
-                                
+                                if ($usage_percent > 100)
+                                    $progress_class = 'danger';
+                                elseif ($usage_percent > 80)
+                                    $progress_class = 'warning';
+
                                 $status_class = 'status-normal';
-                                if ($account['account_status'] === 'Over Limit') $status_class = 'status-over-limit';
-                                elseif ($account['account_status'] === 'Near Limit') $status_class = 'status-near-limit';
-                                elseif ($account['account_status'] === 'Zero Balance') $status_class = 'status-zero';
-                            ?>
+                                if ($account['account_status'] === 'Over Limit')
+                                    $status_class = 'status-over-limit';
+                                elseif ($account['account_status'] === 'Near Limit')
+                                    $status_class = 'status-near-limit';
+                                elseif ($account['account_status'] === 'Zero Balance')
+                                    $status_class = 'status-zero';
+                                ?>
                                 <tr>
                                     <td>
                                         <div style="font-weight: 600;">
-                                            <?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?>
-                                        </div>
-                                        <div style="font-size: 11px; color: var(--muted);"><?= htmlspecialchars($account['email'] ?: 'No email') ?></div>
+                                            <?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?></div>
+                                        <div style="font-size: 11px; color: var(--muted);">
+                                            <?= htmlspecialchars($account['email'] ?: 'No email') ?></div>
                                     </td>
                                     <td>
                                         <div><?= htmlspecialchars($account['contact_number'] ?: 'No phone') ?></div>
-                                        <div style="font-size: 11px;"><?= htmlspecialchars(substr($account['address'] ?? '', 0, 30)) ?>...</div>
+                                        <div style="font-size: 11px;">
+                                            <?= htmlspecialchars(substr($account['address'] ?? '', 0, 30)) ?>...</div>
                                     </td>
                                     <td class="amount">₱<?= number_format($account['credit_limit'], 2) ?></td>
                                     <td>
-                                        <span class="amount <?= $account['current_balance'] > 0 ? 'amount-positive' : 'amount-negative' ?>">
+                                        <span
+                                            class="amount <?= $account['current_balance'] > 0 ? 'amount-positive' : 'amount-negative' ?>">
                                             ₱<?= number_format($account['current_balance'], 2) ?>
                                         </span>
                                     </td>
                                     <td style="min-width: 120px;">
                                         <div class="progress-bar">
-                                            <div class="progress-fill <?= $progress_class ?>" style="width: <?= min($usage_percent, 100) ?>%;"></div>
+                                            <div class="progress-fill <?= $progress_class ?>"
+                                                style="width: <?= min($usage_percent, 100) ?>%;"></div>
                                         </div>
-                                        <div style="font-size: 11px; text-align: right;"><?= number_format($usage_percent, 1) ?>%</div>
+                                        <div style="font-size: 11px; text-align: right;">
+                                            <?= number_format($usage_percent, 1) ?>%</div>
                                     </td>
-                                    <td>
-                                        <span class="account-status <?= $status_class ?>">
-                                            <?= $account['account_status'] ?>
-                                        </span>
+                                    <td><span
+                                            class="account-status <?= $status_class ?>"><?= $account['account_status'] ?></span>
                                     </td>
                                     <td>
                                         <?php if ($account['last_payment_date']): ?>
                                             <div><?= date('M d, Y', strtotime($account['last_payment_date'])) ?></div>
-                                            <div class="payment-info">
-                                                <?= $account['days_since_payment'] ?> days ago
-                                            </div>
+                                            <div class="payment-info"><?= $account['days_since_payment'] ?> days ago</div>
                                         <?php else: ?>
                                             <span class="payment-info">No payments</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
                                         <div class="action-buttons">
-                                            <button class="icon-btn-sm" onclick="viewAccount(<?= htmlspecialchars(json_encode($account)) ?>)">
+                                            <button class="icon-btn-sm"
+                                                onclick="viewAccount(<?= htmlspecialchars(json_encode($account)) ?>)">
                                                 <i class="bi bi-eye"></i>
                                             </button>
-                                            <button class="icon-btn-sm" onclick="recordPayment(<?= $account['credit_id'] ?>, '<?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?>', <?= $account['current_balance'] ?>)">
+                                            <button class="icon-btn-sm"
+                                                onclick="recordPayment(<?= $account['credit_id'] ?>, '<?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?>', <?= $account['current_balance'] ?>)">
                                                 <i class="bi bi-cash"></i> Pay
                                             </button>
-                                            <button class="icon-btn-sm" onclick="editLimit(<?= $account['credit_id'] ?>, '<?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?>', <?= $account['credit_limit'] ?>)">
+                                            <button class="icon-btn-sm"
+                                                onclick="editLimit(<?= $account['credit_id'] ?>, '<?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?>', <?= $account['credit_limit'] ?>)">
                                                 <i class="bi bi-pencil"></i> Limit
                                             </button>
                                             <?php if ($isOwner): ?>
-                                                <button class="icon-btn-sm" onclick="adjustBalance(<?= $account['credit_id'] ?>, '<?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?>', <?= $account['current_balance'] ?>)">
+                                                <button class="icon-btn-sm"
+                                                    onclick="adjustBalance(<?= $account['credit_id'] ?>, '<?= htmlspecialchars($account['first_name'] . ' ' . $account['last_name']) ?>', <?= $account['current_balance'] ?>)">
                                                     <i class="bi bi-sliders"></i> Adjust
                                                 </button>
                                             <?php endif; ?>
@@ -811,7 +795,7 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
         </div>
     </main>
 
-    <!-- Create/Edit Credit Account Modal -->
+    <!-- Create Credit Account Modal -->
     <div id="createModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -834,12 +818,13 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                     </div>
                     <div class="form-group">
                         <label>Credit Limit (₱)</label>
-                        <input type="number" name="credit_limit" step="0.01" min="0" required placeholder="Enter credit limit">
+                        <input type="number" name="credit_limit" step="0.01" min="0" required
+                            placeholder="Enter credit limit">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-secondary" onclick="closeCreateModal()">Cancel</button>
-                    <button type="submit" class="btn-primary">Create Account</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Account</button>
                 </div>
             </form>
         </div>
@@ -858,15 +843,15 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                 <div class="modal-body">
                     <p>Customer: <strong id="payment_customer"></strong></p>
                     <p>Current Balance: <strong id="payment_balance"></strong></p>
-                    
                     <div class="form-group">
                         <label>Payment Amount (₱)</label>
-                        <input type="number" name="payment_amount" step="0.01" min="0.01" required placeholder="Enter payment amount">
+                        <input type="number" name="payment_amount" step="0.01" min="0.01" required
+                            placeholder="Enter payment amount">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-secondary" onclick="closePaymentModal()">Cancel</button>
-                    <button type="submit" class="btn-success">Record Payment</button>
+                    <button type="button" class="btn btn-secondary" onclick="closePaymentModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">Record Payment</button>
                 </div>
             </form>
         </div>
@@ -884,21 +869,20 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                 <input type="hidden" name="customer_id" id="limit_customer_id">
                 <div class="modal-body">
                     <p>Customer: <strong id="limit_customer"></strong></p>
-                    
                     <div class="form-group">
                         <label>New Credit Limit (₱)</label>
                         <input type="number" name="credit_limit" id="limit_amount" step="0.01" min="0" required>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-secondary" onclick="closeLimitModal()">Cancel</button>
-                    <button type="submit" class="btn-primary">Update Limit</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeLimitModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Limit</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Adjust Balance Modal (Owner only) -->
+    <!-- Adjust Balance Modal -->
     <div id="adjustModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -911,15 +895,14 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                 <div class="modal-body">
                     <p>Customer: <strong id="adjust_customer"></strong></p>
                     <p>Current Balance: <strong id="adjust_current"></strong></p>
-                    
                     <div class="form-group">
                         <label>New Balance (₱)</label>
                         <input type="number" name="new_balance" id="adjust_amount" step="0.01" min="0" required>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-secondary" onclick="closeAdjustModal()">Cancel</button>
-                    <button type="submit" class="btn-primary">Adjust Balance</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAdjustModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Adjust Balance</button>
                 </div>
             </form>
         </div>
@@ -936,46 +919,31 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                 <div id="accountDetails"></div>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeViewModal()">Close</button>
+                <button class="btn btn-secondary" onclick="closeViewModal()">Close</button>
             </div>
         </div>
     </div>
 
     <script>
-        // Create Modal
-        function openCreateModal() {
-            document.getElementById('createModal').style.display = 'block';
-        }
-        
-        function closeCreateModal() {
-            document.getElementById('createModal').style.display = 'none';
-        }
-        
-        // Payment Modal
+        function openCreateModal() { document.getElementById('createModal').style.display = 'block'; }
+        function closeCreateModal() { document.getElementById('createModal').style.display = 'none'; }
+
         function recordPayment(id, customer, balance) {
             document.getElementById('payment_credit_id').value = id;
             document.getElementById('payment_customer').textContent = customer;
             document.getElementById('payment_balance').textContent = '₱' + balance.toFixed(2);
             document.getElementById('paymentModal').style.display = 'block';
         }
-        
-        function closePaymentModal() {
-            document.getElementById('paymentModal').style.display = 'none';
-        }
-        
-        // Edit Limit Modal
+        function closePaymentModal() { document.getElementById('paymentModal').style.display = 'none'; }
+
         function editLimit(id, customer, currentLimit) {
             document.getElementById('limit_customer_id').value = id;
             document.getElementById('limit_customer').textContent = customer;
             document.getElementById('limit_amount').value = currentLimit;
             document.getElementById('limitModal').style.display = 'block';
         }
-        
-        function closeLimitModal() {
-            document.getElementById('limitModal').style.display = 'none';
-        }
-        
-        // Adjust Balance Modal
+        function closeLimitModal() { document.getElementById('limitModal').style.display = 'none'; }
+
         function adjustBalance(id, customer, currentBalance) {
             document.getElementById('adjust_credit_id').value = id;
             document.getElementById('adjust_customer').textContent = customer;
@@ -983,12 +951,8 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
             document.getElementById('adjust_amount').value = currentBalance;
             document.getElementById('adjustModal').style.display = 'block';
         }
-        
-        function closeAdjustModal() {
-            document.getElementById('adjustModal').style.display = 'none';
-        }
-        
-        // View Account
+        function closeAdjustModal() { document.getElementById('adjustModal').style.display = 'none'; }
+
         function viewAccount(account) {
             const details = `
                 <div style="background: #f9fafb; border-radius: 8px; padding: 16px;">
@@ -997,13 +961,13 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                         <div><strong>Email:</strong> ${account.email || 'N/A'}</div>
                         <div><strong>Phone:</strong> ${account.contact_number || 'N/A'}</div>
                         <div><strong>Address:</strong> ${account.address || 'N/A'}</div>
-                        <div><strong>Credit Limit:</strong> ₱${account.credit_limit.toFixed(2)}</div>
-                        <div><strong>Current Balance:</strong> ₱${account.current_balance.toFixed(2)}</div>
-                        <div><strong>Usage:</strong> ${account.usage_percent.toFixed(1)}%</div>
-                        <div><strong>Status:</strong> 
-                            <span class="account-status status-${account.account_status === 'Over Limit' ? 'over-limit' : 
-                                (account.account_status === 'Near Limit' ? 'near-limit' : 
-                                (account.account_status === 'Zero Balance' ? 'zero' : 'normal'))}">
+                        <div><strong>Credit Limit:</strong> ₱${parseFloat(account.credit_limit).toFixed(2)}</div>
+                        <div><strong>Current Balance:</strong> ₱${parseFloat(account.current_balance).toFixed(2)}</div>
+                        <div><strong>Usage:</strong> ${parseFloat(account.usage_percent).toFixed(1)}%</div>
+                        <div><strong>Status:</strong>
+                            <span class="account-status status-${account.account_status === 'Over Limit' ? 'over-limit' :
+                    (account.account_status === 'Near Limit' ? 'near-limit' :
+                        (account.account_status === 'Zero Balance' ? 'zero' : 'normal'))}">
                                 ${account.account_status}
                             </span>
                         </div>
@@ -1012,21 +976,17 @@ $accountsOverLimit = count(array_filter($creditAccounts, function($acc) {
                     </div>
                 </div>
             `;
-            
             document.getElementById('accountDetails').innerHTML = details;
             document.getElementById('viewModal').style.display = 'block';
         }
-        
-        function closeViewModal() {
-            document.getElementById('viewModal').style.display = 'none';
-        }
-        
-        // Close modals when clicking outside
-        window.onclick = function(event) {
+        function closeViewModal() { document.getElementById('viewModal').style.display = 'none'; }
+
+        window.onclick = function (event) {
             if (event.target.classList.contains('modal')) {
                 event.target.style.display = 'none';
             }
         }
     </script>
 </body>
+
 </html>

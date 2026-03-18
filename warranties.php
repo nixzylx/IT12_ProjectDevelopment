@@ -39,10 +39,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'update_status' && isset($_POST['warranty_id'])) {
         $warranty_id = $_POST['warranty_id'];
         $new_status = $_POST['status'];
-        
+
         $stmt = $conn->prepare("UPDATE warranties SET warranty_status = ? WHERE warranty_id = ?");
         $stmt->bind_param("si", $new_status, $warranty_id);
-        
+
         if ($stmt->execute()) {
             $message = "Warranty status updated successfully!";
         } else {
@@ -50,15 +50,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         $stmt->close();
     }
-    
+
     // Handle warranty claim
     if ($_POST['action'] === 'claim' && isset($_POST['warranty_id'])) {
         $warranty_id = $_POST['warranty_id'];
         $claim_notes = trim($_POST['claim_notes']);
-        
+
         $stmt = $conn->prepare("UPDATE warranties SET warranty_status = 'Claimed', claim_date = CURDATE(), claim_notes = ? WHERE warranty_id = ?");
         $stmt->bind_param("si", $claim_notes, $warranty_id);
-        
+
         if ($stmt->execute()) {
             $message = "Warranty claimed successfully!";
         } else {
@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Get filter parameters
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
-$customer_filter = isset($_GET['customer_id']) ? (int)$_GET['customer_id'] : 0;
+$customer_filter = isset($_GET['customer_id']) ? (int) $_GET['customer_id'] : 0;
 $date_from = isset($_GET['date_from']) ? $_GET['date_from'] : '';
 $date_to = isset($_GET['date_to']) ? $_GET['date_to'] : '';
 
@@ -106,7 +106,7 @@ if (!empty($date_to)) {
 $where_clause = !empty($where) ? "WHERE " . implode(" AND ", $where) : "";
 
 // Pagination
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
 $limit = 20;
 $offset = ($page - 1) * $limit;
 
@@ -187,6 +187,7 @@ $stats = array_merge($stats, $statsResult);
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -200,47 +201,62 @@ $stats = array_merge($stats, $statsResult);
             gap: 16px;
             margin-bottom: 24px;
         }
-        
+
         .stat-card {
             background: #fff;
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
             border: 1px solid var(--border);
         }
-        
-        .stat-card.active { border-left: 4px solid #10b981; }
-        .stat-card.expiring { border-left: 4px solid #f59e0b; }
-        .stat-card.expired { border-left: 4px solid #ef4444; }
-        .stat-card.claimed { border-left: 4px solid #6b7280; }
-        
+
+        .stat-card.active {
+            border-left: 4px solid #10b981;
+        }
+
+        .stat-card.expiring {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .stat-card.expired {
+            border-left: 4px solid #ef4444;
+        }
+
+        .stat-card.claimed {
+            border-left: 4px solid #6b7280;
+        }
+
         .stat-value {
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 4px;
         }
-        
+
         .stat-label {
             color: var(--muted);
             font-size: 13px;
         }
-        
+
         .filter-section {
             background: #f9fafb;
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 24px;
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            align-items: flex-end;
         }
-        
+
+        .filter-section form {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+            align-items: flex-end;
+            justify-content: space-between;
+        }
+
         .filter-group {
             flex: 1;
-            min-width: 150px;
+            min-width: 0;
         }
-        
+
         .filter-group label {
             display: block;
             font-size: 12px;
@@ -248,21 +264,43 @@ $stats = array_merge($stats, $statsResult);
             margin-bottom: 6px;
             color: var(--text);
         }
-        
-        .filter-group select,
-        .filter-group input {
+
+        .filter-group select {
             width: 100%;
-            padding: 8px 12px;
+            box-sizing: border-box;
+            padding: 9px 12px;
             border: 1px solid var(--border);
             border-radius: 8px;
             font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 12px;
+            padding-right: 36px;
         }
-        
+
+        .filter-group input[type=date] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+            appearance: none;
+        }
+
         .filter-actions {
             display: flex;
             gap: 8px;
+            align-items: flex-end;
+            flex-shrink: 0;
         }
-        
+
         .status-badge {
             display: inline-block;
             padding: 4px 12px;
@@ -270,33 +308,33 @@ $stats = array_merge($stats, $statsResult);
             font-size: 11px;
             font-weight: 600;
         }
-        
+
         .status-active {
             background: #10b98120;
             color: #10b981;
         }
-        
+
         .status-expired {
             background: #ef444420;
             color: #ef4444;
         }
-        
+
         .status-claimed {
             background: #6b728020;
             color: #6b7280;
         }
-        
+
         .expiring-soon {
             background: #f59e0b20;
             color: #f59e0b;
             font-weight: 600;
         }
-        
+
         .warranty-days {
             font-size: 12px;
             font-weight: 500;
         }
-        
+
         .modal {
             display: none;
             position: fixed;
@@ -305,18 +343,18 @@ $stats = array_merge($stats, $statsResult);
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.5);
         }
-        
+
         .modal-content {
             background-color: #fff;
             margin: 50px auto;
             padding: 0;
             width: 500px;
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
-        
+
         .modal-header {
             padding: 20px 24px;
             border-bottom: 1px solid var(--border);
@@ -324,13 +362,13 @@ $stats = array_merge($stats, $statsResult);
             justify-content: space-between;
             align-items: center;
         }
-        
+
         .modal-header h3 {
             font-size: 18px;
             font-weight: 600;
             margin: 0;
         }
-        
+
         .modal-close {
             background: none;
             border: none;
@@ -338,41 +376,41 @@ $stats = array_merge($stats, $statsResult);
             cursor: pointer;
             color: var(--muted);
         }
-        
+
         .modal-body {
             padding: 24px;
         }
-        
+
         .modal-footer {
             padding: 16px 24px;
             border-top: 1px solid var(--border);
             text-align: right;
             background: #f9fafb;
         }
-        
+
         .warranty-detail {
             background: #f9fafb;
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 16px;
         }
-        
+
         .detail-row {
             display: flex;
             margin-bottom: 8px;
         }
-        
+
         .detail-label {
             width: 120px;
             font-size: 13px;
             color: var(--muted);
         }
-        
+
         .detail-value {
             font-size: 13px;
             font-weight: 500;
         }
-        
+
         .btn {
             padding: 8px 16px;
             border-radius: 8px;
@@ -382,34 +420,48 @@ $stats = array_merge($stats, $statsResult);
             border: none;
             transition: all 0.15s;
         }
-        
-        .btn-primary {
+
+        .filter-actions .btn-primary {
+            padding: 9px 16px;
+            font-size: 13px;
+            border-radius: 8px;
             background: var(--accent);
             color: #fff;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            height: auto;
         }
-        
-        .btn-primary:hover {
-            background: var(--accent-dark);
+
+        .filter-actions .btn-primary:hover,
+        .filter-actions .btn-primary:active,
+        .filter-actions .btn-primary:focus {
+            background: var(--accent-dark, #1d4ed8);
+            color: #fff;
+            opacity: 1;
+            visibility: visible;
         }
-        
+
         .btn-secondary {
             background: #e5e7eb;
             color: var(--text);
         }
-        
+
         .btn-secondary:hover {
             background: #d1d5db;
         }
-        
+
         .btn-danger {
             background: #ef4444;
             color: #fff;
         }
-        
+
         .btn-danger:hover {
             background: #dc2626;
         }
-        
+
         .btn-dashboard {
             background: #4f46e5;
             color: #fff;
@@ -423,16 +475,36 @@ $stats = array_merge($stats, $statsResult);
             border: none;
             cursor: pointer;
         }
-        
+
         .btn-dashboard:hover {
             background: #4338ca;
         }
-        
+
+        .btn-clear {
+            padding: 9px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            background: #fff;
+            color: var(--text);
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            transition: all 0.15s;
+        }
+
+        .btn-clear:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+
         .action-buttons {
             display: flex;
             gap: 8px;
         }
-        
+
         .icon-btn-sm {
             padding: 6px 10px;
             border: 1px solid var(--border);
@@ -444,12 +516,12 @@ $stats = array_merge($stats, $statsResult);
             text-decoration: none;
             color: var(--text);
         }
-        
+
         .icon-btn-sm:hover {
             background: #f9fafb;
             border-color: var(--accent);
         }
-        
+
         .alert {
             padding: 12px 16px;
             border-radius: 8px;
@@ -458,39 +530,39 @@ $stats = array_merge($stats, $statsResult);
             align-items: center;
             gap: 8px;
         }
-        
+
         .alert-success {
             background: #10b98120;
             color: #10b981;
         }
-        
+
         .alert-error {
             background: #ef444420;
             color: #ef4444;
         }
-        
+
         .empty-state {
             text-align: center;
             padding: 40px 20px;
         }
-        
+
         .empty-icon {
             font-size: 48px;
             margin-bottom: 16px;
             opacity: 0.3;
         }
-        
+
         .empty-text {
             color: var(--muted);
             font-size: 14px;
         }
-        
+
         .topbar-right {
             display: flex;
             align-items: center;
             gap: 12px;
         }
-        
+
         textarea {
             width: 100%;
             padding: 10px 12px;
@@ -500,95 +572,32 @@ $stats = array_merge($stats, $statsResult);
             resize: vertical;
             min-height: 80px;
         }
-        
+
         textarea:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
     </style>
 </head>
+
 <body>
-    <aside class="sidebar">
-        <div class="logo">
-            <a href="admin_dashboard.php" class="logo-container">
-                <div class="logo-mark">
-                    <img src="AB logo.png" alt="AutoBert Logo" class="logo-img">
-                </div>
-                <div class="logo-text-wrapper">
-                    <div class="logo-name">AutoBert</div>
-                    <div class="logo-sub">Repair Shop &amp; Batteries</div>
-                </div>
-            </a>
-        </div>
+    <?php
+    $currentPage = 'warranties.php';
+    $userRoleLabel = htmlspecialchars($role);
+    $pendingApprovals = 0;
+    $activeJobs = 0;
+    $pa = $conn->query("SELECT COUNT(*) AS cnt FROM employee WHERE is_approved=0");
 
-        <nav class="nav-section">
-            <div class="nav-label">Main</div>
-            <a class="nav-item" href="admin_dashboard.php">
-                <i class="bi bi-speedometer2"></i> Dashboard
-            </a>
-            <a class="nav-item" href="new_job_order.php">
-                <i class="bi bi-clipboard-data"></i> Job Orders
-            </a>
-            <a class="nav-item" href="sales.php">
-                <i class="bi bi-currency-dollar"></i> Sales
-            </a>
-            <a class="nav-item" href="payments.php">
-                <i class="bi bi-credit-card"></i> Payments
-            </a>
-            <a class="nav-item" href="products.php">
-                <i class="bi bi-box-seam"></i> Products
-            </a>
-        </nav>
+    if ($pa && $r = $pa->fetch_assoc())
+        $pendingApprovals = $r['cnt'];
+    $aj = $conn->query("SELECT COUNT(*) AS cnt FROM job_orders WHERE status NOT IN ('Completed','Cancelled')");
 
-        <nav class="nav-section">
-            <div class="nav-label">Management</div>
-            <a class="nav-item" href="customers.php">
-                <i class="bi bi-people"></i> Customers
-            </a>
-            <a class="nav-item" href="vehicles.php">
-                <i class="bi bi-truck"></i> Vehicles
-            </a>
-            <?php if ($isOwner): ?>
-                <a class="nav-item" href="employees.php">
-                    <i class="bi bi-person-badge"></i> Employees
-                </a>
-                <a class="nav-item" href="admin_approvals.php">
-                    <i class="bi bi-check-circle"></i> Approvals
-                </a>
-            <?php endif; ?>
-            <a class="nav-item active" href="warranties.php">
-                <i class="bi bi-shield-check"></i> Warranties
-            </a>
-            <a class="nav-item" href="credit_accounts.php">
-                <i class="bi bi-wallet2"></i> Credit Accounts
-            </a>
-        </nav>
+    if ($aj && $r = $aj->fetch_assoc())
+        $activeJobs = $r['cnt'];
 
-        <?php if ($isOwner || $isBusinessPartner): ?>
-        <nav class="nav-section">
-            <div class="nav-label">Reports</div>
-            <a class="nav-item" href="reports.php">
-                <i class="bi bi-bar-chart-line"></i> Reports
-            </a>
-        </nav>
-        <?php endif; ?>
-
-        <div class="sidebar-footer">
-            <div class="user-row">
-                <div class="avatar"><?= $userInitials ?></div>
-                <div>
-                    <div class="user-name"><?= $firstname ?></div>
-                    <div class="user-role"><?= $userRoleLabel ?></div>
-                </div>
-            </div>
-            <div style="margin-top: 10px; text-align: center;">
-                <a href="logout.php" style="color: var(--sidebar-text); text-decoration: none; font-size: 12px;">
-                    <i class="bi bi-box-arrow-right"></i> Logout
-                </a>
-            </div>
-        </div>
-    </aside>
+    include 'approval_page.php';
+    ?>
 
     <main class="main">
         <header class="topbar">
@@ -657,7 +666,8 @@ $stats = array_merge($stats, $statsResult);
                         <select name="customer_id">
                             <option value="">All Customers</option>
                             <?php foreach ($customers as $customer): ?>
-                                <option value="<?= $customer['customer_id'] ?>" <?= $customer_filter == $customer['customer_id'] ? 'selected' : '' ?>>
+                                <option value="<?= $customer['customer_id'] ?>"
+                                    <?= $customer_filter == $customer['customer_id'] ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($customer['first_name'] . ' ' . $customer['last_name']) ?>
                                 </option>
                             <?php endforeach; ?>
@@ -672,8 +682,10 @@ $stats = array_merge($stats, $statsResult);
                         <input type="date" name="date_to" value="<?= htmlspecialchars($date_to) ?>">
                     </div>
                     <div class="filter-actions">
-                        <button type="submit" class="btn-primary">Apply Filters</button>
-                        <a href="warranties.php" class="btn-secondary" style="text-decoration: none; display: inline-block; padding: 8px 16px;">Clear</a>
+                        <button type="submit" class="btn btn-primary" style="white-space: nowrap;">
+                            Apply Filters
+                        </button>
+                        <a href="warranties.php" class="btn btn-clear">Clear</a>
                     </div>
                 </form>
             </div>
@@ -705,15 +717,17 @@ $stats = array_merge($stats, $statsResult);
                                 </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($warranties as $warranty): 
+                            <?php foreach ($warranties as $warranty):
                                 $days_remaining = $warranty['days_remaining'];
                                 $is_expiring_soon = $days_remaining > 0 && $days_remaining <= 30;
-                            ?>
+                                ?>
                                 <tr>
                                     <td>#<?= str_pad($warranty['warranty_id'], 5, '0', STR_PAD_LEFT) ?></td>
                                     <td>
                                         <div style="font-weight: 500;"><?= htmlspecialchars($warranty['customer_name']) ?></div>
-                                        <div style="font-size: 11px; color: var(--muted);"><?= htmlspecialchars($warranty['contact_number']) ?></div>
+                                        <div style="font-size: 11px; color: var(--muted);">
+                                            <?= htmlspecialchars($warranty['contact_number']) ?>
+                                        </div>
                                     </td>
                                     <td><?= htmlspecialchars($warranty['product_name']) ?></td>
                                     <td><?= htmlspecialchars($warranty['serial_number'] ?: 'N/A') ?></td>
@@ -746,16 +760,19 @@ $stats = array_merge($stats, $statsResult);
                                     </td>
                                     <td>
                                         <div class="action-buttons">
-                                            <button class="icon-btn-sm" onclick="viewWarranty(<?= htmlspecialchars(json_encode($warranty)) ?>)">
+                                            <button class="icon-btn-sm"
+                                                onclick="viewWarranty(<?= htmlspecialchars(json_encode($warranty)) ?>)">
                                                 <i class="bi bi-eye"></i>
                                             </button>
                                             <?php if ($warranty['warranty_status'] === 'Active'): ?>
                                                 <?php if ($days_remaining >= 0): ?>
-                                                    <button class="icon-btn-sm" onclick="claimWarranty(<?= $warranty['warranty_id'] ?>, '<?= htmlspecialchars($warranty['customer_name']) ?>', '<?= htmlspecialchars($warranty['product_name']) ?>')">
+                                                    <button class="icon-btn-sm"
+                                                        onclick="claimWarranty(<?= $warranty['warranty_id'] ?>, '<?= htmlspecialchars($warranty['customer_name']) ?>', '<?= htmlspecialchars($warranty['product_name']) ?>')">
                                                         <i class="bi bi-check-circle"></i> Claim
                                                     </button>
                                                 <?php endif; ?>
-                                                <button class="icon-btn-sm" onclick="updateStatus(<?= $warranty['warranty_id'] ?>, '<?= $warranty['warranty_status'] ?>')">
+                                                <button class="icon-btn-sm"
+                                                    onclick="updateStatus(<?= $warranty['warranty_id'] ?>, '<?= $warranty['warranty_status'] ?>')">
                                                     <i class="bi bi-arrow-repeat"></i> Status
                                                 </button>
                                             <?php endif; ?>
@@ -769,27 +786,30 @@ $stats = array_merge($stats, $statsResult);
 
                 <!-- Pagination -->
                 <?php if ($totalPages > 1): ?>
-                <div style="display: flex; justify-content: center; gap: 8px; padding: 20px; border-top: 1px solid var(--border);">
-                    <?php if ($page > 1): ?>
-                        <a href="?page=<?= $page-1 ?><?= !empty($status_filter) ? '&status='.urlencode($status_filter) : '' ?><?= $customer_filter ? '&customer_id='.$customer_filter : '' ?><?= !empty($date_from) ? '&date_from='.urlencode($date_from) : '' ?><?= !empty($date_to) ? '&date_to='.urlencode($date_to) : '' ?>" class="icon-btn-sm">
-                            <i class="bi bi-chevron-left"></i> Previous
-                        </a>
-                    <?php endif; ?>
-                    
-                    <?php for ($i = max(1, $page-2); $i <= min($totalPages, $page+2); $i++): ?>
-                        <a href="?page=<?= $i ?><?= !empty($status_filter) ? '&status='.urlencode($status_filter) : '' ?><?= $customer_filter ? '&customer_id='.$customer_filter : '' ?><?= !empty($date_from) ? '&date_from='.urlencode($date_from) : '' ?><?= !empty($date_to) ? '&date_to='.urlencode($date_to) : '' ?>" 
-                           class="icon-btn-sm <?= $i === $page ? 'btn-primary' : '' ?>"
-                           style="<?= $i === $page ? 'background: var(--accent); color: #fff; border-color: var(--accent);' : '' ?>">
-                            <?= $i ?>
-                        </a>
-                    <?php endfor; ?>
-                    
-                    <?php if ($page < $totalPages): ?>
-                        <a href="?page=<?= $page+1 ?><?= !empty($status_filter) ? '&status='.urlencode($status_filter) : '' ?><?= $customer_filter ? '&customer_id='.$customer_filter : '' ?><?= !empty($date_from) ? '&date_from='.urlencode($date_from) : '' ?><?= !empty($date_to) ? '&date_to='.urlencode($date_to) : '' ?>" class="icon-btn-sm">
-                            Next <i class="bi bi-chevron-right"></i>
-                        </a>
-                    <?php endif; ?>
-                </div>
+                    <div
+                        style="display: flex; justify-content: center; gap: 8px; padding: 20px; border-top: 1px solid var(--border);">
+                        <?php if ($page > 1): ?>
+                            <a href="?page=<?= $page - 1 ?><?= !empty($status_filter) ? '&status=' . urlencode($status_filter) : '' ?><?= $customer_filter ? '&customer_id=' . $customer_filter : '' ?><?= !empty($date_from) ? '&date_from=' . urlencode($date_from) : '' ?><?= !empty($date_to) ? '&date_to=' . urlencode($date_to) : '' ?>"
+                                class="icon-btn-sm">
+                                <i class="bi bi-chevron-left"></i> Previous
+                            </a>
+                        <?php endif; ?>
+
+                        <?php for ($i = max(1, $page - 2); $i <= min($totalPages, $page + 2); $i++): ?>
+                            <a href="?page=<?= $i ?><?= !empty($status_filter) ? '&status=' . urlencode($status_filter) : '' ?><?= $customer_filter ? '&customer_id=' . $customer_filter : '' ?><?= !empty($date_from) ? '&date_from=' . urlencode($date_from) : '' ?><?= !empty($date_to) ? '&date_to=' . urlencode($date_to) : '' ?>"
+                                class="icon-btn-sm <?= $i === $page ? 'btn-primary' : '' ?>"
+                                style="<?= $i === $page ? 'background: var(--accent); color: #fff; border-color: var(--accent);' : '' ?>">
+                                <?= $i ?>
+                            </a>
+                        <?php endfor; ?>
+
+                        <?php if ($page < $totalPages): ?>
+                            <a href="?page=<?= $page + 1 ?><?= !empty($status_filter) ? '&status=' . urlencode($status_filter) : '' ?><?= $customer_filter ? '&customer_id=' . $customer_filter : '' ?><?= !empty($date_from) ? '&date_from=' . urlencode($date_from) : '' ?><?= !empty($date_to) ? '&date_to=' . urlencode($date_to) : '' ?>"
+                                class="icon-btn-sm">
+                                Next <i class="bi bi-chevron-right"></i>
+                            </a>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -824,10 +844,11 @@ $stats = array_merge($stats, $statsResult);
                 <div class="modal-body">
                     <p>Claiming warranty for: <strong id="claim_customer"></strong></p>
                     <p>Product: <strong id="claim_product"></strong></p>
-                    
+
                     <div class="form-group">
                         <label>Claim Notes</label>
-                        <textarea name="claim_notes" placeholder="Enter details about the warranty claim..." required></textarea>
+                        <textarea name="claim_notes" placeholder="Enter details about the warranty claim..."
+                            required></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -925,15 +946,15 @@ $stats = array_merge($stats, $statsResult);
                     ` : ''}
                 </div>
             `;
-            
+
             document.getElementById('warrantyDetails').innerHTML = details;
             document.getElementById('viewModal').style.display = 'block';
         }
-        
+
         function closeViewModal() {
             document.getElementById('viewModal').style.display = 'none';
         }
-        
+
         // Claim Warranty
         function claimWarranty(id, customer, product) {
             document.getElementById('claim_warranty_id').value = id;
@@ -941,28 +962,29 @@ $stats = array_merge($stats, $statsResult);
             document.getElementById('claim_product').textContent = product;
             document.getElementById('claimModal').style.display = 'block';
         }
-        
+
         function closeClaimModal() {
             document.getElementById('claimModal').style.display = 'none';
         }
-        
+
         // Update Status
         function updateStatus(id, currentStatus) {
             document.getElementById('status_warranty_id').value = id;
             document.getElementById('status_select').value = currentStatus;
             document.getElementById('statusModal').style.display = 'block';
         }
-        
+
         function closeStatusModal() {
             document.getElementById('statusModal').style.display = 'none';
         }
-        
+
         // Close modals when clicking outside
-        window.onclick = function(event) {
+        window.onclick = function (event) {
             if (event.target.classList.contains('modal')) {
                 event.target.style.display = 'none';
             }
         }
     </script>
 </body>
+
 </html>
