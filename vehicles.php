@@ -19,11 +19,6 @@ if (!$user || $user['is_approved'] == 0) {
     exit();
 }
 
-if (in_array(strtolower($user['role']), ['mechanic', 'employee'])) {
-    header("Location: mechanic_dashboard.php");
-    exit();
-}
-
 $role = $user['role'];
 $firstname = htmlspecialchars($user['first_name']);
 $isOwner = strtolower($role) === 'owner' || strtolower($role) === 'business partner';
@@ -31,6 +26,12 @@ $userInitials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['las
 
 $successMsg = '';
 $errorMsg = '';
+
+// Create upload directory if it doesn't exist
+$upload_dir = 'uploads/vehicles/';
+if (!file_exists($upload_dir)) {
+    mkdir($upload_dir, 0777, true);
+}
 
 // Get all customers for dropdown
 $customers = [];
@@ -50,17 +51,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $model = ucwords($conn->real_escape_string(trim($_POST['model'] ?? '')));
         $year_model = intval($_POST['year_model'] ?? 0);
         
+        // Handle image upload
+        $vehicle_image = null;
+        if (isset($_FILES['vehicle_image']) && $_FILES['vehicle_image']['error'] === UPLOAD_ERR_OK) {
+            $allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+            $file_type = $_FILES['vehicle_image']['type'];
+            $file_size = $_FILES['vehicle_image']['size'];
+            $max_size = 5 * 1024 * 1024; // 5MB
+            
+            if (in_array($file_type, $allowed_types) && $file_size <= $max_size) {
+                $file_extension = pathinfo($_FILES['vehicle_image']['name'], PATHINFO_EXTENSION);
+                $filename = 'vehicle_' . time() . '_' . rand(1000, 9999) . '.' . $file_extension;
+                $upload_path = $upload_dir . $filename;
+                
+                if (move_uploaded_file($_FILES['vehicle_image']['tmp_name'], $upload_path)) {
+                    $vehicle_image = $upload_path;
+                } else {
+                    $errorMsg = "Failed to upload image.";
+                }
+            } else {
+                $errorMsg = "Invalid image file. Allowed types: JPG, PNG, WEBP. Max size: 5MB.";
+            }
+        }
+        
         if ($customer_id && $plate_number && $brand && $model && $year_model) {
             // Check if plate number already exists
             $check = $conn->query("SELECT vehicle_id FROM vehicles WHERE plate_number = '$plate_number'");
             if ($check && $check->num_rows > 0) {
                 $errorMsg = "Vehicle with plate number '$plate_number' already exists.";
             } else {
-                $sql = "INSERT INTO vehicles (customer_id, plate_number, brand, model, year_model) 
-                        VALUES (?, ?, ?, ?, ?)";
+                $sql = "INSERT INTO vehicles (customer_id, plate_number, brand, model, year_model, vehicle_image) 
+                        VALUES (?, ?, ?, ?, ?, ?)";
                 
                 $stmt = $conn->prepare($sql);
-                $stmt->bind_param("isssi", $customer_id, $plate_number, $brand, $model, $year_model);
+                $stmt->bind_param("isssis", $customer_id, $plate_number, $brand, $model, $year_model, $vehicle_image);
                 
                 if ($stmt->execute()) {
                     $successMsg = "Vehicle registered successfully!";
@@ -82,14 +106,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $model = ucwords($conn->real_escape_string(trim($_POST['model'] ?? '')));
         $year_model = intval($_POST['year_model'] ?? 0);
         
+        // Handle image upload for update
+        $vehicle_image = null;
+        $keep_current = isset($_POST['keep_current_image']) && $_POST['keep_current_image'] == '1';
+        
+        if (isset($_FILES['vehicle_image']) && $_FILES['vehicle_image']['error'] === UPLOAD_ERR_OK) {
+            $allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+            $file_type = $_FILES['vehicle_image']['type'];
+            $file_size = $_FILES['vehicle_image']['size'];
+            $max_size = 5 * 1024 * 1024;
+            
+            if (in_array($file_type, $allowed_types) && $file_size <= $max_size) {
+                $file_extension = pathinfo($_FILES['vehicle_image']['name'], PATHINFO_EXTENSION);
+                $filename = 'vehicle_' . time() . '_' . rand(1000, 9999) . '.' . $file_extension;
+                $upload_path = $upload_dir . $filename;
+                
+                if (move_uploaded_file($_FILES['vehicle_image']['tmp_name'], $upload_path)) {
+                    $vehicle_image = $upload_path;
+                } else {
+                    $errorMsg = "Failed to upload image.";
+                }
+            } else {
+                $errorMsg = "Invalid image file. Allowed types: JPG, PNG, WEBP. Max size: 5MB.";
+            }
+        }
+        
         // Check if plate number already exists for another vehicle
         $check = $conn->query("SELECT vehicle_id FROM vehicles WHERE plate_number = '$plate_number' AND vehicle_id != $vehicle_id");
         if ($check && $check->num_rows > 0) {
             $errorMsg = "Vehicle with plate number '$plate_number' already exists.";
         } else {
-            $sql = "UPDATE vehicles SET plate_number = ?, brand = ?, model = ?, year_model = ? WHERE vehicle_id = ?";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("sssii", $plate_number, $brand, $model, $year_model, $vehicle_id);
+            if ($vehicle_image) {
+                // Get old image to delete
+                $old_img = $conn->query("SELECT vehicle_image FROM vehicles WHERE vehicle_id = $vehicle_id")->fetch_assoc();
+                if ($old_img && $old_img['vehicle_image'] && file_exists($old_img['vehicle_image'])) {
+                    unlink($old_img['vehicle_image']);
+                }
+                $sql = "UPDATE vehicles SET plate_number = ?, brand = ?, model = ?, year_model = ?, vehicle_image = ? WHERE vehicle_id = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("sssisi", $plate_number, $brand, $model, $year_model, $vehicle_image, $vehicle_id);
+            } else {
+                $sql = "UPDATE vehicles SET plate_number = ?, brand = ?, model = ?, year_model = ? WHERE vehicle_id = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("sssii", $plate_number, $brand, $model, $year_model, $vehicle_id);
+            }
             
             if ($stmt->execute()) {
                 $successMsg = "Vehicle updated successfully!";
@@ -110,6 +170,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($row['count'] > 0) {
                 $errorMsg = "Cannot delete vehicle because it has existing job orders.";
             } else {
+                // Delete image file
+                $img = $conn->query("SELECT vehicle_image FROM vehicles WHERE vehicle_id = $vehicle_id")->fetch_assoc();
+                if ($img && $img['vehicle_image'] && file_exists($img['vehicle_image'])) {
+                    unlink($img['vehicle_image']);
+                }
                 $conn->query("DELETE FROM vehicles WHERE vehicle_id = $vehicle_id");
                 $successMsg = "Vehicle deleted successfully!";
             }
@@ -216,7 +281,7 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
         /* Vehicle Grid - Simplified */
         .vehicle-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -236,28 +301,47 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
             border-color: var(--accent);
         }
         
-        .vehicle-header {
+        .vehicle-image {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            background: #f3f4f6;
+        }
+        
+        .vehicle-image-placeholder {
+            width: 100%;
+            height: 180px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: white;
+            font-size: 48px;
+        }
+        
+        .vehicle-header {
+            padding: 16px;
+            background: #fff;
         }
         
         .vehicle-header h3 {
             font-family: "Syne", sans-serif;
             font-size: 18px;
             margin: 0 0 4px 0;
+            color: var(--text);
         }
         
         .vehicle-plate {
             font-size: 14px;
-            opacity: 0.9;
+            color: var(--accent);
+            font-weight: 600;
             display: flex;
             align-items: center;
             gap: 4px;
         }
         
         .vehicle-info {
-            padding: 16px;
+            padding: 0 16px 16px 16px;
         }
         
         .info-row {
@@ -438,13 +522,17 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
         .modal {
             background: #fff;
             border-radius: 16px;
-            width: 500px;
+            width: 550px;
             max-width: 95vw;
             max-height: 90vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             box-shadow: 0 20px 60px rgba(0,0,0,.25);
+        }
+        
+        .modal.large {
+            width: 700px;
         }
         
         .modal-header {
@@ -509,6 +597,10 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
             font-family: inherit;
         }
         
+        .form-group input[type="file"] {
+            padding: 8px 12px;
+        }
+        
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
@@ -520,6 +612,20 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
+        }
+        
+        .image-preview {
+            margin-top: 8px;
+            max-width: 100%;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .image-preview img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
         }
         
         /* Detail View */
@@ -575,6 +681,19 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
             font-size: 16px;
             font-weight: 600;
             color: var(--text);
+        }
+        
+        .vehicle-detail-image {
+            grid-column: span 2;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .vehicle-detail-image img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
         }
         
         .history-table {
@@ -645,12 +764,32 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
             margin-bottom: 20px;
         }
         
+        .current-image {
+            margin-top: 8px;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .current-image img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        
         @media (max-width: 768px) {
             .vehicle-grid {
                 grid-template-columns: 1fr;
             }
             .detail-grid {
                 grid-template-columns: 1fr;
+            }
+            .vehicle-detail-image {
+                grid-column: span 1;
             }
         }
     </style>
@@ -754,8 +893,27 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
                             <button class="btn-outline" onclick="editVehicle(<?= $selected_vehicle['vehicle_id'] ?>)">
                                 <i class="bi bi-pencil"></i> Edit
                             </button>
+                            <?php if ($selected_vehicle['total_jobs'] == 0): ?>
+                                <button class="btn-outline" style="background: #fee2e2; color: #dc2626; border-color: #fecaca; margin-left: 8px;" onclick="deleteVehicle(<?= $selected_vehicle['vehicle_id'] ?>)">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            <?php endif; ?>
                         </div>
                     </div>
+                    
+                    <!-- Vehicle Image -->
+                    <?php if (!empty($selected_vehicle['vehicle_image']) && file_exists($selected_vehicle['vehicle_image'])): ?>
+                        <div class="vehicle-detail-image">
+                            <img src="<?= htmlspecialchars($selected_vehicle['vehicle_image']) ?>" alt="Vehicle Image">
+                        </div>
+                    <?php else: ?>
+                        <div class="vehicle-detail-image">
+                            <div style="background: #f3f4f6; border-radius: 12px; padding: 40px; text-align: center;">
+                                <i class="bi bi-image" style="font-size: 64px; color: #9ca3af;"></i>
+                                <p style="color: #6b7280; margin-top: 8px;">No image uploaded</p>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                     
                     <div class="detail-grid">
                         <div class="detail-item">
@@ -788,6 +946,12 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
                             <div class="value"><?= date('M d, Y', strtotime($selected_vehicle['last_visit'])) ?></div>
                         </div>
                         <?php endif; ?>
+                        <?php if (!empty($selected_vehicle['address'])): ?>
+                        <div class="detail-item">
+                            <div class="label">Address</div>
+                            <div class="value"><?= htmlspecialchars($selected_vehicle['address']) ?></div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     
                     <!-- Service History -->
@@ -813,7 +977,7 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
                                 <tr onclick="window.location.href='job_orders.php?view=<?= $job['job_order_id'] ?>'">
                                     <td><?= date('M d, Y', strtotime($job['date_received'])) ?></td>
                                     <td>#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></td>
-                                    <td><?= htmlspecialchars(substr($job['job_description'], 0, 40)) ?></td>
+                                    <td><?= htmlspecialchars(substr($job['job_description'], 0, 40)) ?>...</td>
                                     <td><?= htmlspecialchars($job['mechanic_name'] ?? 'N/A') ?></td>
                                     <td><span class="status-badge status-<?= strtolower($job['status']) ?>"><?= $job['status'] ?></span></td>
                                 </tr>
@@ -870,6 +1034,14 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
                     <?php else: ?>
                         <?php foreach ($vehicles as $vehicle): ?>
                             <div class="vehicle-card" onclick="window.location.href='vehicles.php?view=<?= $vehicle['vehicle_id'] ?>'">
+                                <?php if (!empty($vehicle['vehicle_image']) && file_exists($vehicle['vehicle_image'])): ?>
+                                    <img src="<?= htmlspecialchars($vehicle['vehicle_image']) ?>" alt="Vehicle" class="vehicle-image">
+                                <?php else: ?>
+                                    <div class="vehicle-image-placeholder">
+                                        <i class="bi bi-car-front-fill"></i>
+                                    </div>
+                                <?php endif; ?>
+                                
                                 <div class="vehicle-header">
                                     <h3><?= htmlspecialchars($vehicle['brand'] . ' ' . $vehicle['model']) ?></h3>
                                     <div class="vehicle-plate">
@@ -910,12 +1082,12 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
 
     <!-- Add Vehicle Modal -->
     <div class="modal-overlay" id="addVehicleModal">
-        <div class="modal">
+        <div class="modal large">
             <div class="modal-header">
                 <h2><i class="bi bi-truck" style="color:var(--accent);"></i> Register New Vehicle</h2>
                 <button class="modal-close" onclick="closeModal('addVehicleModal')">&times;</button>
             </div>
-            <form method="POST">
+            <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="add_vehicle">
                 <div class="modal-body">
                     <div class="form-group">
@@ -952,6 +1124,13 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
                         <input type="number" name="year_model" required min="1900" max="<?= date('Y')+1 ?>" 
                                placeholder="2024" value="<?= htmlspecialchars($_POST['year_model'] ?? date('Y')) ?>">
                     </div>
+                    
+                    <div class="form-group">
+                        <label>Vehicle Picture</label>
+                        <input type="file" name="vehicle_image" accept="image/jpeg,image/png,image/jpg,image/webp">
+                        <small style="color: var(--muted);">Max size: 5MB. Allowed: JPG, PNG, WEBP</small>
+                        <div id="add_image_preview" class="image-preview" style="display: none;"></div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn-outline" onclick="closeModal('addVehicleModal')">Cancel</button>
@@ -963,20 +1142,18 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
 
     <!-- Edit Vehicle Modal -->
     <div class="modal-overlay" id="editVehicleModal">
-        <div class="modal">
+        <div class="modal large">
             <div class="modal-header">
                 <h2><i class="bi bi-pencil-square" style="color:var(--accent);"></i> Edit Vehicle</h2>
                 <button class="modal-close" onclick="closeModal('editVehicleModal')">&times;</button>
             </div>
-            <form method="POST" id="editVehicleForm">
+            <form method="POST" enctype="multipart/form-data" id="editVehicleForm">
                 <input type="hidden" name="action" value="update_vehicle">
                 <input type="hidden" name="vehicle_id" id="edit_vehicle_id">
                 <div class="modal-body">
                     <div class="form-group">
                         <label>Owner</label>
-                        <select name="customer_id" id="edit_customer_id" disabled>
-                            <!-- Populated via JavaScript -->
-                        </select>
+                        <input type="text" id="edit_owner_name" disabled style="background: #f3f4f6;">
                         <small style="color: var(--muted);">Owner cannot be changed. Create a new vehicle if needed.</small>
                     </div>
                     
@@ -999,6 +1176,19 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
                     <div class="form-group">
                         <label>Year *</label>
                         <input type="number" name="year_model" id="edit_year_model" required min="1900" max="<?= date('Y')+1 ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Current Picture</label>
+                        <div id="edit_current_image"></div>
+                        <input type="hidden" name="keep_current_image" id="keep_current_image" value="1">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Change Picture (optional)</label>
+                        <input type="file" name="vehicle_image" id="edit_vehicle_image" accept="image/jpeg,image/png,image/jpg,image/webp">
+                        <small style="color: var(--muted);">Upload new image to replace current. Max size: 5MB</small>
+                        <div id="edit_image_preview" class="image-preview" style="display: none;"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1042,25 +1232,73 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
             });
         });
 
+        // Image preview for add modal
+        document.querySelector('#addVehicleModal input[name="vehicle_image"]')?.addEventListener('change', function(e) {
+            const preview = document.getElementById('add_image_preview');
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    preview.innerHTML = '<img src="' + event.target.result + '" alt="Preview">';
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(this.files[0]);
+            } else {
+                preview.innerHTML = '';
+                preview.style.display = 'none';
+            }
+        });
+
+        // Image preview for edit modal
+        document.querySelector('#editVehicleModal input[name="vehicle_image"]')?.addEventListener('change', function(e) {
+            const preview = document.getElementById('edit_image_preview');
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    preview.innerHTML = '<img src="' + event.target.result + '" alt="Preview">';
+                    preview.style.display = 'block';
+                    document.getElementById('keep_current_image').value = '0';
+                };
+                reader.readAsDataURL(this.files[0]);
+            } else {
+                preview.innerHTML = '';
+                preview.style.display = 'none';
+                document.getElementById('keep_current_image').value = '1';
+            }
+        });
+
         function editVehicle(vehicleId) {
             // Fetch vehicle data via AJAX
             fetch(`get_vehicle.php?id=${vehicleId}`)
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('edit_vehicle_id').value = data.vehicle_id;
-                    
-                    // Create owner option
-                    const ownerSelect = document.getElementById('edit_customer_id');
-                    ownerSelect.innerHTML = `<option value="${data.customer_id}">${data.owner_name}</option>`;
-                    
+                    document.getElementById('edit_owner_name').value = data.owner_name;
                     document.getElementById('edit_plate_number').value = data.plate_number;
                     document.getElementById('edit_brand').value = data.brand;
                     document.getElementById('edit_model').value = data.model;
                     document.getElementById('edit_year_model').value = data.year_model;
                     
+                    // Show current image
+                    const currentImageDiv = document.getElementById('edit_current_image');
+                    if (data.vehicle_image && data.vehicle_image !== 'null') {
+                        currentImageDiv.innerHTML = `
+                            <div class="current-image">
+                                <img src="${data.vehicle_image}" alt="Current vehicle image">
+                                <span style="font-size: 12px; color: #6b7280;">Current image</span>
+                            </div>
+                        `;
+                    } else {
+                        currentImageDiv.innerHTML = '<p style="color: #6b7280; font-size: 12px;">No image uploaded</p>';
+                    }
+                    
+                    document.getElementById('keep_current_image').value = '1';
+                    document.getElementById('edit_image_preview').innerHTML = '';
+                    document.getElementById('edit_image_preview').style.display = 'none';
+                    
                     openModal('editVehicleModal');
                 })
                 .catch(error => {
+                    console.error('Error:', error);
                     alert('Error loading vehicle data');
                 });
         }
