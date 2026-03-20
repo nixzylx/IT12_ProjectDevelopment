@@ -6,6 +6,7 @@ $firstname        = $firstname ?? htmlspecialchars($_SESSION['firstname'] ?? 'Us
 $userInitials     = $userInitials ?? strtoupper(substr($_SESSION['firstname'] ?? 'U', 0, 1) . substr($_SESSION['lastname'] ?? '', 0, 1));
 $userRoleLabel    = $userRoleLabel ?? $role ?? htmlspecialchars($_SESSION['role'] ?? '');
 $currentPage      = $currentPage ?? basename($_SERVER['PHP_SELF']);
+$isMechanic       = isset($role) && in_array(strtolower($role), ['mechanic', 'employee']);
 
 function nav_active(string $page): string {
     global $currentPage;
@@ -15,7 +16,7 @@ function nav_active(string $page): string {
 
 <aside class="sidebar">
     <div class="logo">
-        <a href="admin_dashboard.php" class="logo-container">
+        <a href="<?= $isMechanic ? 'mechanic_dashboard.php' : 'admin_dashboard.php' ?>" class="logo-container">
             <div class="logo-mark">
                 <img src="AB logo.png" alt="AutoBert Logo" class="logo-img">
             </div>
@@ -26,12 +27,36 @@ function nav_active(string $page): string {
         </a>
     </div>
 
+    <?php if ($isMechanic): ?>
+    <!-- ── MECHANIC SIDEBAR ── -->
+    <nav class="nav-section">
+        <div class="nav-label">Main</div>
+        <a class="nav-item <?= nav_active('mechanic_dashboard.php') ?>" href="mechanic_dashboard.php">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a class="nav-item <?= nav_active('mechanic_dashboard.php') ?>" href="mechanic_dashboard.php?status=active">
+            <i class="bi bi-clipboard-check"></i> My Job Orders
+        </a>
+    </nav>
+
+    <nav class="nav-section">
+        <div class="nav-label">Pages</div>
+        <a class="nav-item <?= nav_active('sales.php') ?>" href="sales.php">
+            <i class="bi bi-currency-dollar"></i> Sales
+        </a>
+        <a class="nav-item <?= nav_active('products.php') ?>" href="products.php">
+            <i class="bi bi-box-seam"></i> Products
+        </a>
+    </nav>
+
+    <?php else: ?>
+    <!-- ── ADMIN / OWNER SIDEBAR ── -->
     <nav class="nav-section">
         <div class="nav-label">Main</div>
         <a class="nav-item <?= nav_active('admin_dashboard.php') ?>" href="admin_dashboard.php">
             <i class="bi bi-speedometer2"></i> Dashboard
         </a>
-        <a class="nav-item <?= nav_active('job_orders.php') ?>" href="new_job_order.php">
+        <a class="nav-item <?= nav_active('new_job_order.php') ?>" href="new_job_order.php">
             <i class="bi bi-clipboard-data"></i> Job Orders
             <?php if ($activeJobs > 0): ?>
                 <span class="pending-approvals-badge" style="background:var(--accent);"><?= $activeJobs ?></span>
@@ -82,6 +107,8 @@ function nav_active(string $page): string {
                 <i class="bi bi-bar-chart-line"></i> Reports
             </a>
         </nav>
+    <?php endif; ?>
+
     <?php endif; ?>
 
     <div class="sidebar-footer">

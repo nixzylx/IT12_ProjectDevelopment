@@ -24,6 +24,11 @@ if (!$user || $user['is_approved'] == 0) {
     exit();
 }
 
+if (in_array(strtolower($user['role']), ['mechanic', 'employee'])) {
+    header("Location: mechanic_dashboard.php");
+    exit();
+}
+
 $role = $user['role'];
 $firstname = htmlspecialchars($user['first_name'] ?? 'User');
 $userInitials = strtoupper(substr($firstname, 0, 1) . substr($user['last_name'] ?? '', 0, 1));

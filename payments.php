@@ -19,6 +19,11 @@ if (!$user || $user['is_approved'] == 0) {
     exit();
 }
 
+if (in_array(strtolower($user['role']), ['mechanic', 'employee'])) {
+    header("Location: mechanic_dashboard.php");
+    exit();
+}
+
 $role = $user['role'];
 $firstname = htmlspecialchars($user['first_name']);
 $isOwner = strtolower($role) === 'owner';
@@ -234,8 +239,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Filters
 $filter_method = $_GET['method'] ?? 'all';
-$filter_date_from = $_GET['date_from'] ?? date('Y-01-01');
-$filter_date_to = $_GET['date_to'] ?? date('Y-m-d');
+$filter_date_from = $_GET['date_from'] ?? '';
+$filter_date_to = $_GET['date_to'] ?? '';
 $filter_search = trim($_GET['search'] ?? '');
 
 $where_clauses = ["1=1"];
@@ -927,30 +932,46 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             <!-- Stats Cards -->
             <div class="payments-stats">
                 <div class="stat-card featured">
-                    <div class="stat-icon">💰</div>
+                    <div class="stat-icon"><i class="bi bi-piggy-bank-fill"></i></div>
                     <div class="stat-label">Total Payments</div>
-                    <div class="stat-value">₱<?= number_format($stats['total_all'] ?? 0, 2) ?></div>
-                    <div class="stat-sub"><?= number_format($stats['count'] ?? 0) ?> transactions</div>
+                    <div class="stat-value">₱
+                        <?= number_format($stats['total_all'] ?? 0, 2) ?>
+                    </div>
+                    <div class="stat-sub">
+                        <?= number_format($stats['count'] ?? 0) ?> transactions
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <div class="stat-icon">💵</div>
+                    <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
                     <div class="stat-label">Cash</div>
-                    <div class="stat-value">₱<?= number_format($stats['total_cash'] ?? 0, 2) ?></div>
+                    <div class="stat-value">₱
+                        <?= number_format($stats['total_cash'] ?? 0, 2) ?>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <div class="stat-icon">📱</div>
+                    <div class="stat-icon"><i class="bi bi-phone-vibrate"></i></div>
                     <div class="stat-label">GCash</div>
-                    <div class="stat-value">₱<?= number_format($stats['total_gcash'] ?? 0, 2) ?></div>
+                    <div class="stat-value">₱
+                        <?= number_format($stats['total_gcash'] ?? 0, 2) ?>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <div class="stat-icon">🏦</div>
+                    <div class="stat-icon"><i class="bi bi-bank"></i></div>
                     <div class="stat-label">Bank Transfer</div>
-                    <div class="stat-value">₱<?= number_format($stats['total_bank'] ?? 0, 2) ?></div>
+                    <div class="stat-value">₱
+                        <?= number_format($stats['total_bank'] ?? 0, 2) ?>
+                    </div>
                 </div>
+
                 <div class="stat-card">
-                    <div class="stat-icon">💳</div>
+                    <div class="stat-icon"><i class="bi bi-credit-card"></i></div>
                     <div class="stat-label">Credit</div>
-                    <div class="stat-value">₱<?= number_format($stats['total_credit'] ?? 0, 2) ?></div>
+                    <div class="stat-value">₱
+                        <?= number_format($stats['total_credit'] ?? 0, 2) ?>
+                    </div>
                 </div>
             </div>
 

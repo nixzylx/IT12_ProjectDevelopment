@@ -19,6 +19,11 @@ if (!$user || $user['is_approved'] == 0) {
     exit();
 }
 
+if (in_array(strtolower($user['role']), ['mechanic', 'employee'])) {
+    header("Location: mechanic_dashboard.php");
+    exit();
+}
+
 $role = $user['role'];
 $firstname = htmlspecialchars($user['first_name']);
 $isOwner = strtolower($role) === 'owner' || strtolower($role) === 'business partner';
@@ -808,7 +813,7 @@ $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
                                 <tr onclick="window.location.href='job_orders.php?view=<?= $job['job_order_id'] ?>'">
                                     <td><?= date('M d, Y', strtotime($job['date_received'])) ?></td>
                                     <td>#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></td>
-                                    <td><?= htmlspecialchars(substr($job['job_description'], 0, 40)) ?>...</td>
+                                    <td><?= htmlspecialchars(substr($job['job_description'], 0, 40)) ?></td>
                                     <td><?= htmlspecialchars($job['mechanic_name'] ?? 'N/A') ?></td>
                                     <td><span class="status-badge status-<?= strtolower($job['status']) ?>"><?= $job['status'] ?></span></td>
                                 </tr>

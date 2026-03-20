@@ -35,8 +35,8 @@ $userRoleLabel = htmlspecialchars($role ?? 'Staff');
 $isOwner = true;
 
 // Date range filter
-$date_from = isset($_GET['date_from']) ? $_GET['date_from'] : date('Y-m-01');
-$date_to   = isset($_GET['date_to'])   ? $_GET['date_to']   : date('Y-m-d');
+$date_from = $_GET['date_from'] ?? date('Y-m-d');
+$date_to   = $_GET['date_to']   ?? date('Y-m-d');
 $report_type = isset($_GET['report']) ? $_GET['report'] : 'overview';
 
 // ── Summary Stats ──────────────────────────────────────────

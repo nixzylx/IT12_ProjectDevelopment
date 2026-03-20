@@ -24,6 +24,19 @@ $userInitials = strtoupper(substr($user['first_name'], 0, 1) . substr($user['las
 $successMsg = '';
 $errorMsg = '';
 
+// Service types with fixed prices (same as job orders)
+$service_types = [
+    'Mechanical Job' => 2000,
+    'Auto Electrical Job' => 1500,
+    'Alternator and Starter Repair' => 3000,
+    'Body Alignment and Painting' => 8000,
+    'Calibration' => 1000,
+    'Battery Charging and Radiator Overhaul' => 2500,
+    'Change Oil' => 1500,
+    'Welding Job' => 1200,
+    'OBD II Scanning' => 500
+];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($_POST['action'] === 'create_sale') {
@@ -36,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($customer_id && !empty($items)) {
             $total = 0;
             foreach ($items as $item) {
-                $total += floatval($item['unit_price']) * intval($item['qty']);
+                $total += floatval($item['unit_price']) * intval($item['qty'] ?? 1);
             }
             $final_amount = max(0, $total - $discount);
             $conn->begin_transaction();
@@ -52,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $itype = $item['type'];
                     $prod_id = intval($item['product_id'] ?? 0) ?: null;
                     $desc = trim($item['description']);
-                    $qty = intval($item['qty']);
+                    $qty = intval($item['qty'] ?? 1);
                     $uprice = floatval($item['unit_price']);
                     $subtotal = $uprice * $qty;
                     // direct query with proper escaping and null handling
@@ -60,13 +73,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $conn->query("INSERT INTO sales_items (sales_id, product_id, item_type, description, quantity, unit_price, subtotal)
                                   VALUES ($sales_id, $prod_val, '" . $conn->real_escape_string($itype) . "',
                                          '" . $conn->real_escape_string($desc) . "', $qty, $uprice, $subtotal)");
-                    // update stock 
+                    // update stock for products only
                     if ($prod_id && $itype === 'Product') {
                         $conn->query("UPDATE products SET stock_quantity = stock_quantity - $qty WHERE product_id = $prod_id");
                     }
                 }
                 $conn->commit();
                 $successMsg = "Sale #" . str_pad($sales_id, 5, '0', STR_PAD_LEFT) . " created successfully!";
+                header("Location: sales.php?success=" . urlencode($successMsg));
+                exit();
             } catch (Exception $e) {
                 $conn->rollback();
                 $errorMsg = "Failed to create sale: " . $e->getMessage();
@@ -119,6 +134,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $errorMsg = "Invalid payment data.";
         }
     }
+}
+// Handle success message from redirect
+if (isset($_GET['success'])) {
+    $successMsg = htmlspecialchars($_GET['success']);
 }
 // filters 
 $filter_status = $_GET['status'] ?? 'all';
@@ -185,11 +204,13 @@ $c_res = $conn->query("SELECT customer_id, CONCAT(first_name,' ',last_name) AS n
 
 while ($c_res && $r = $c_res->fetch_assoc())
     $customers[] = $r;
+    
 $products = [];
 $p_res = $conn->query("SELECT product_id, product_name, unit_price, stock_quantity FROM products ORDER BY product_name");
 
 while ($p_res && $r = $p_res->fetch_assoc())
     $products[] = $r;
+    
 $job_orders = [];
 $j_res = $conn->query("SELECT jo.job_order_id, CONCAT('#',LPAD(jo.job_order_id,5,'0'),' - ',c.first_name,' ',c.last_name) AS label
                         FROM job_orders jo JOIN customers c ON jo.customer_id=c.customer_id
@@ -197,6 +218,7 @@ $j_res = $conn->query("SELECT jo.job_order_id, CONCAT('#',LPAD(jo.job_order_id,5
 
 while ($j_res && $r = $j_res->fetch_assoc())
     $job_orders[] = $r;
+    
 // pending approvals and active jobs for sidebar badges
 $pa_res = $conn->query("SELECT COUNT(*) AS cnt FROM employee WHERE is_approved=0");
 $pendingApprovals = ($pa_res && $r = $pa_res->fetch_assoc()) ? $r['cnt'] : 0;
@@ -381,6 +403,12 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             font-family: "Syne", sans-serif;
             font-weight: 700;
             color: var(--accent);
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .sale-id:hover {
+            text-decoration: underline;
         }
 
         .customer-name {
@@ -434,7 +462,7 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
         .modal {
             background: #fff;
             border-radius: 16px;
-            width: 660px;
+            width: 860px;
             max-width: 95vw;
             max-height: 90vh;
             display: flex;
@@ -560,6 +588,11 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             border: 1px solid var(--border);
             border-radius: 6px;
             font-size: 12px;
+        }
+        
+        .items-table input.qty-input {
+            width: 70px;
+            text-align: center;
         }
 
         .btn-add-item {
@@ -715,6 +748,17 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             background: #fee2e2;
             color: #991b1b;
         }
+        
+        .qty-hidden {
+            display: none;
+        }
+        
+        .fixed-qty {
+            display: inline-block;
+            padding: 7px 0;
+            color: #6b7280;
+            font-size: 12px;
+        }
 
         @media (max-width: 768px) {
             .sales-stats {
@@ -864,9 +908,9 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             </div>
             <!-- sales table -->
             <div class="table-card">
-                <table>
+                 <table>
                     <thead>
-                        <tr>
+                         <tr>
                             <th>Sale #</th>
                             <th>Date</th>
                             <th>Customer</th>
@@ -877,55 +921,56 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                             <th>Balance</th>
                             <th>Status</th>
                             <th>Actions</th>
-                        </tr>
+                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($sales_rows)): ?>
-                            <tr>
+                             <tr>
                                 <td colspan="10">
                                     <div class="empty-state">
                                         <i class="bi bi-receipt"></i>
                                         <div>No sales records found.</div>
                                         <button class="btn-primary"
-                                            style="margin:20px auto 0; padding:3px 8px; font-size:13px; align-items:center; gap: 1px; line-height: normal;">
-                                            <i class="bi bi-plus" style="position:relative; top:7px;"></i> Create First Sale
+                                            style="margin:20px auto 0; padding:8px 16px; font-size:13px;" onclick="openNewSaleModal()">
+                                            <i class="bi bi-plus-lg"></i> Create First Sale
                                         </button>
                                     </div>
-                                </td>
-                            </tr>
+                                 </td>
+                              </tr>
                         <?php else: ?>
                             <?php foreach ($sales_rows as $sale):
                                 $paid = floatval($sale['total_paid'] ?? 0);
                                 $balance = floatval($sale['final_amount']) - $paid;
-                                $badge_class = match ($sale['status']) {
-                                    'Paid' => 'badge-paid',
-                                    'Partially Paid' => 'badge-partial',
-                                    default => 'badge-unpaid',
-                                };
+                                switch ($sale['status']) {
+                                    case 'Paid':
+                                        $badge_class = 'badge-paid';
+                                        break;
+                                    case 'Partially Paid':
+                                        $badge_class = 'badge-partial';
+                                        break;
+                                    default:
+                                        $badge_class = 'badge-unpaid';
+                                }
                                 // count items in this sale
                                 $ic_res = $conn->query("SELECT COUNT(*) AS cnt FROM sales_items WHERE sales_id=" . $sale['sales_id']);
                                 $item_count = $ic_res ? $ic_res->fetch_assoc()['cnt'] : 0;
                                 ?>
                                 <tr onclick="viewSale(<?= $sale['sales_id'] ?>)">
-                                    <td><span class="sale-id">#<?= str_pad($sale['sales_id'], 5, '0', STR_PAD_LEFT) ?></span>
+                                    <td onclick="event.stopPropagation()">
+                                        <a href="invoice.php?id=<?= $sale['sales_id'] ?>" class="sale-id">#<?= str_pad($sale['sales_id'], 5, '0', STR_PAD_LEFT) ?></a>
                                     </td>
                                     <td><?= date('M d, Y', strtotime($sale['sales_date'])) ?><br>
-                                        <span
-                                            style="font-size:11px; color:var(--muted)"><?= date('h:i A', strtotime($sale['sales_date'])) ?></span>
+                                        <span style="font-size:11px; color:var(--muted)"><?= date('h:i A', strtotime($sale['sales_date'])) ?></span>
                                     </td>
-                                    <td><span
-                                            class="customer-name"><?= htmlspecialchars($sale['customer_name'] ?? '—') ?></span>
-                                    </td>
-                                    <td><?= $sale['job_order_id'] ? '#' . str_pad($sale['job_order_id'], 5, '0', STR_PAD_LEFT) : '<span style="color:var(--muted)">—</span>' ?>
-                                    </td>
+                                    <td><span class="customer-name"><?= htmlspecialchars($sale['customer_name'] ?? '—') ?></span></td>
+                                    <td><?= $sale['job_order_id'] ? '#' . str_pad($sale['job_order_id'], 5, '0', STR_PAD_LEFT) : '<span style="color:var(--muted)">—</span>' ?></td>
                                     <td style="text-align:center"><?= $item_count ?></td>
                                     <td class="amount">₱<?= number_format($sale['final_amount'], 2) ?></td>
                                     <td style="color:var(--green); font-weight:600;">₱<?= number_format($paid, 2) ?></td>
                                     <td style="color:<?= $balance > 0 ? 'var(--red)' : 'var(--green)' ?>; font-weight:600;">
                                         ₱<?= number_format(max(0, $balance), 2) ?>
                                     </td>
-                                    <td><span class="badge <?= $badge_class ?>"><?= htmlspecialchars($sale['status']) ?></span>
-                                    </td>
+                                    <td><span class="badge <?= $badge_class ?>"><?= htmlspecialchars($sale['status']) ?></span></td>
                                     <td onclick="event.stopPropagation()">
                                         <?php if ($sale['status'] === 'Paid'): ?>
                                             <button class="btn-pay" disabled
@@ -943,18 +988,18 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </tbody>
-                </table>
+                  </table>
             </div>
         </div>
     </main>
     <!-- new sale modal -->
     <div class="modal-overlay" id="newSaleModal">
-        <div class="modal" style="width:760px;">
+        <div class="modal">
             <div class="modal-header">
                 <h2><i class="bi bi-receipt" style="color:var(--accent)"></i>&nbsp; New Sale</h2>
                 <button class="modal-close" onclick="closeModal('newSaleModal')">&times;</button>
             </div>
-            <form method="POST">
+            <form method="POST" id="saleForm">
                 <input type="hidden" name="action" value="create_sale">
                 <div class="modal-body">
                     <div class="form-row">
@@ -984,13 +1029,13 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
                     <table class="items-table">
                         <thead>
                             <tr>
-                                <th style="width:90px">Type</th>
+                                <th style="width:110px">Type</th>
                                 <th>Description / Product</th>
-                                <th style="width:60px">Qty</th>
+                                <th style="width:70px">Qty</th>
                                 <th style="width:110px">Unit Price</th>
                                 <th style="width:100px">Subtotal</th>
                                 <th style="width:36px"></th>
-                            </tr>
+                             </tr>
                         </thead>
                         <tbody id="itemsBody">
                         </tbody>
@@ -1081,15 +1126,12 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
     </div>
     <script>
         // pass products data to JS for item selection in new sale modal
-        const products = <?= json_encode($products) ?>;
-        // modal controls
-        function openModal(id) { document.getElementById(id).classList.add('open'); }
-        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-        document.querySelectorAll('.modal-overlay').forEach(m => {
-            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
-        });
-        // new sale modal 
+        const products = <?php echo json_encode($products); ?>;
+        // Service types with prices for dropdown
+        const serviceTypes = <?php echo json_encode($service_types); ?>;
+        
         let itemIdx = 0;
+        
         function openNewSaleModal() {
             document.getElementById('itemsBody').innerHTML = '';
             itemIdx = 0;
@@ -1097,68 +1139,121 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             recalcTotal();
             openModal('newSaleModal');
         }
+        
         function addItemRow() {
             const tbody = document.getElementById('itemsBody');
             const idx = itemIdx++;
             const tr = document.createElement('tr');
             tr.id = 'item_row_' + idx;
-            const productOptions = products.map(p =>
-                `<option value="${p.product_id}" data-price="${p.unit_price}">${p.product_name} (₱${parseFloat(p.unit_price).toFixed(2)})</option>`
-            ).join('');
+            
+            // Build product options - NO PRICE IN TEXT
+            let productOptions = '<option value="">Select Product</option>';
+            for (let i = 0; i < products.length; i++) {
+                let p = products[i];
+                productOptions += '<option value="' + p.product_id + '" data-price="' + p.unit_price + '">' + p.product_name + '</option>';
+            }
+            
             tr.innerHTML = `
-        <td>
-            <select name="items[${idx}][type]" onchange="toggleItemType(${idx})">
-                <option value="Product">Product</option>
-                <option value="Service">Service</option>
-            </select>
-        </td>
-        <td id="item_desc_cell_${idx}">
-            <select name="items[${idx}][product_id]" id="item_prod_${idx}" onchange="fillPrice(${idx})">
-                <option value="">Select Product</option>
-                ${productOptions}
-            </select>
-            <input type="hidden" name="items[${idx}][description]" id="item_desc_${idx}" value="">
-        </td>
-        <td><input type="number" name="items[${idx}][qty]" value="1" min="1" oninput="recalcTotal()" style="width:50px;"></td>
-        <td><input type="number" name="items[${idx}][unit_price]" id="item_price_${idx}" value="0" min="0" step="0.01" oninput="recalcTotal()"></td>
-        <td id="item_sub_${idx}" style="font-weight:600; padding:6px 10px;">₱0.00</td>
-        <td><button type="button" class="btn-remove-item" onclick="removeItemRow(${idx})"><i class="bi bi-trash"></i></button></td>
-    `;
+                <td>
+                    <select name="items[${idx}][type]" id="item_type_${idx}" onchange="toggleItemType(${idx})">
+                        <option value="Product">Product</option>
+                        <option value="Service">Service</option>
+                    </select>
+                </td>
+                <td id="item_desc_cell_${idx}">
+                    <select name="items[${idx}][product_id]" id="item_prod_${idx}" onchange="fillProductPrice(${idx})">
+                        ${productOptions}
+                    </select>
+                    <input type="hidden" name="items[${idx}][description]" id="item_desc_${idx}" value="">
+                </td>
+                <td id="item_qty_cell_${idx}">
+                    <input type="number" name="items[${idx}][qty]" id="item_qty_${idx}" value="1" min="1" oninput="recalcTotal()" style="width:70px; text-align:center;">
+                </td>
+                <td><input type="number" name="items[${idx}][unit_price]" id="item_price_${idx}" value="0" min="0" step="0.01" oninput="recalcTotal()"></td>
+                <td id="item_sub_${idx}" style="font-weight:600; padding:6px 10px;">₱0.00</td>
+                <td><button type="button" class="btn-remove-item" onclick="removeItemRow(${idx})"><i class="bi bi-trash"></i></button></td>
+            `;
             tbody.appendChild(tr);
         }
+        
         function toggleItemType(idx) {
-            const typeEl = document.querySelector(`[name="items[${idx}][type]"]`);
-            const cell = document.getElementById('item_desc_cell_' + idx);
+            const typeEl = document.getElementById(`item_type_${idx}`);
+            const cell = document.getElementById(`item_desc_cell_${idx}`);
+            const qtyCell = document.getElementById(`item_qty_cell_${idx}`);
+            
             if (typeEl.value === 'Service') {
-                cell.innerHTML = `<input type="text" name="items[${idx}][description]" placeholder="Service description" required>
-                          <input type="hidden" name="items[${idx}][product_id]" value="">`;
+                // Service: show service dropdown - NO PRICE IN TEXT
+                let serviceOptions = '<option value="">Select Service</option>';
+                for (let service in serviceTypes) {
+                    let price = serviceTypes[service];
+                    serviceOptions += '<option value="' + service + '" data-price="' + price + '">' + service + '</option>';
+                }
+                cell.innerHTML = `
+                    <select name="items[${idx}][product_id]" id="item_prod_${idx}" onchange="fillServicePrice(${idx})">
+                        ${serviceOptions}
+                    </select>
+                    <input type="hidden" name="items[${idx}][description]" id="item_desc_${idx}" value="">
+                `;
+                // Hide quantity for services (set to 1 and show as fixed)
+                qtyCell.innerHTML = `<input type="hidden" name="items[${idx}][qty]" value="1"><span class="fixed-qty">1 (fixed)</span>`;
+                document.getElementById(`item_price_${idx}`).value = '0';
             } else {
-                const productOptions = products.map(p =>
-                    `<option value="${p.product_id}" data-price="${p.unit_price}">${p.product_name} (₱${parseFloat(p.unit_price).toFixed(2)})</option>`
-                ).join('');
-                cell.innerHTML = `<select name="items[${idx}][product_id]" id="item_prod_${idx}" onchange="fillPrice(${idx})">
-                            <option value="">Select Product</option>${productOptions}
-                          </select>
-                          <input type="hidden" name="items[${idx}][description]" id="item_desc_${idx}" value="">`;
+                // Product: show product dropdown - NO PRICE IN TEXT
+                let productOptions = '<option value="">Select Product</option>';
+                for (let i = 0; i < products.length; i++) {
+                    let p = products[i];
+                    productOptions += '<option value="' + p.product_id + '" data-price="' + p.unit_price + '">' + p.product_name + '</option>';
+                }
+                cell.innerHTML = `
+                    <select name="items[${idx}][product_id]" id="item_prod_${idx}" onchange="fillProductPrice(${idx})">
+                        ${productOptions}
+                    </select>
+                    <input type="hidden" name="items[${idx}][description]" id="item_desc_${idx}" value="">
+                `;
+                qtyCell.innerHTML = `<input type="number" name="items[${idx}][qty]" id="item_qty_${idx}" value="1" min="1" oninput="recalcTotal()" style="width:70px; text-align:center;">`;
+                document.getElementById(`item_price_${idx}`).value = '0';
             }
         }
-        function fillPrice(idx) {
-            const sel = document.getElementById('item_prod_' + idx);
-            const price = sel.options[sel.selectedIndex]?.dataset.price ?? 0;
-            document.getElementById('item_price_' + idx).value = parseFloat(price).toFixed(2);
-            const descEl = document.getElementById('item_desc_' + idx);
-            if (descEl) descEl.value = sel.options[sel.selectedIndex]?.text.split(' (₱')[0] ?? '';
+        
+        function fillProductPrice(idx) {
+            const sel = document.getElementById(`item_prod_${idx}`);
+            const selectedOption = sel.options[sel.selectedIndex];
+            const price = selectedOption?.dataset?.price ?? 0;
+            const priceInput = document.getElementById(`item_price_${idx}`);
+            priceInput.value = parseFloat(price).toFixed(2);
+            
+            const descEl = document.getElementById(`item_desc_${idx}`);
+            if (descEl) {
+                descEl.value = selectedOption?.text ?? '';
+            }
             recalcTotal();
         }
+        
+        function fillServicePrice(idx) {
+            const sel = document.getElementById(`item_prod_${idx}`);
+            const selectedOption = sel.options[sel.selectedIndex];
+            const price = selectedOption?.dataset?.price ?? 0;
+            const serviceName = selectedOption?.value ?? '';
+            const priceInput = document.getElementById(`item_price_${idx}`);
+            priceInput.value = parseFloat(price).toFixed(2);
+            
+            const descEl = document.getElementById(`item_desc_${idx}`);
+            if (descEl) {
+                descEl.value = serviceName;
+            }
+            recalcTotal();
+        }
+        
         function removeItemRow(idx) {
             const row = document.getElementById('item_row_' + idx);
             if (row) row.remove();
             recalcTotal();
         }
+        
         function recalcTotal() {
             let total = 0;
             document.querySelectorAll('#itemsBody tr').forEach(tr => {
-                const qty = parseFloat(tr.querySelector('[name*="[qty]"]')?.value ?? 0);
+                const qty = parseFloat(tr.querySelector('[name*="[qty]"]')?.value ?? 1);
                 const price = parseFloat(tr.querySelector('[name*="[unit_price]"]')?.value ?? 0);
                 const sub = qty * price;
                 const subEl = tr.querySelector('[id^="item_sub_"]');
@@ -1169,6 +1264,15 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             const grand = Math.max(0, total - discount);
             document.getElementById('grandTotal').textContent = '₱' + grand.toFixed(2);
         }
+        
+        // modal controls
+        function openModal(id) { document.getElementById(id).classList.add('open'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+        });
+        
         // payment Modal 
         function openPaymentModal(salesId, finalAmt, paid) {
             const balance = Math.max(0, finalAmt - paid);
@@ -1177,52 +1281,10 @@ $activeJobs = ($activeJobs_res && $r = $activeJobs_res->fetch_assoc()) ? $r['cnt
             document.getElementById('pay_amount').value = balance.toFixed(2);
             openModal('paymentModal');
         }
-        // view sale details
+        
+        // view sale details - redirect to invoice
         function viewSale(salesId) {
-            openModal('detailModal');
-            document.getElementById('detailTitle').innerHTML = '<i class="bi bi-receipt"></i>&nbsp; Sale #' + String(salesId).padStart(5, '0');
-            document.getElementById('detailBody').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Loading…</div>';
-            // Check if this sale is already paid (from table row badge)
-            const row = document.querySelector(`tr[onclick="viewSale(${salesId})"]`);
-            const statusBadge = row ? row.querySelector('.badge') : null;
-            const isPaid = statusBadge && statusBadge.textContent.trim() === 'Paid';
-            const payBtn = document.getElementById('detailPayBtn');
-
-            if (isPaid) {
-                payBtn.disabled = true;
-                payBtn.style.opacity = '0.4';
-                payBtn.style.cursor = 'not-allowed';
-                payBtn.style.background = '#e5e7eb';
-                payBtn.style.color = '#6b7280';
-                payBtn.innerHTML = '<i class="bi bi-check-circle"></i> Already Paid';
-                payBtn.onclick = null;
-            } else {
-                payBtn.disabled = false;
-                payBtn.style.opacity = '';
-                payBtn.style.cursor = '';
-                payBtn.style.background = '';
-                payBtn.style.color = '';
-                payBtn.innerHTML = 'Record Payment';
-                payBtn.onclick = function () {
-                    closeModal('detailModal');
-                    if (row) {
-                        const cells = row.querySelectorAll('td');
-                        const finalAmt = parseFloat(cells[5].textContent.replace('₱', '').replace(/,/g, ''));
-                        const paid = parseFloat(cells[6].textContent.replace('₱', '').replace(/,/g, ''));
-                        openPaymentModal(salesId, finalAmt, paid);
-                    } else {
-                        openPaymentModal(salesId, 0, 0);
-                    }
-                };
-            }
-            fetch('sales_detail.php?id=' + salesId)
-                .then(r => r.text())
-                .then(html => {
-                    document.getElementById('detailBody').innerHTML = html;
-                })
-                .catch(() => {
-                    document.getElementById('detailBody').innerHTML = '<p style="color:var(--muted);text-align:center;padding:32px">Could not load details.</p>';
-                });
+            window.location.href = 'invoice.php?id=' + salesId;
         }
     </script>
 </body>

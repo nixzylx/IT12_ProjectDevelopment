@@ -120,7 +120,7 @@ try {
             'title' => 'Active Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT),
             'message' => htmlspecialchars($row['customer']) . ' — ' . htmlspecialchars($row['status']),
             'time' => $row['date_received'],
-            'link' => 'job_orders.php?view=' . $row['job_order_id'],
+            'link' => 'new_job_order.php?view=' . $row['job_order_id'],
         ];
     }
 } catch (Exception $e) {
@@ -140,7 +140,7 @@ try {
             'title' => 'Job Completed Today',
             'message' => 'Job #' . str_pad($row['job_order_id'], 5, '0', STR_PAD_LEFT) . ' - ' . htmlspecialchars($row['customer']),
             'time' => $row['date_completed'],
-            'link' => 'job_orders.php?view=' . $row['job_order_id'],
+            'link' => 'new_job_order.php?view=' . $row['job_order_id'],
         ];
     }
 } catch (Exception $e) {
@@ -1130,11 +1130,6 @@ $isOwner = strtolower($role) === 'owner';
                 <span class="breadcrumb">Overview & Analytics</span>
             </div>
 
-            <div class="search-bar">
-                <i class="bi bi-search"></i>
-                <input type="text" placeholder="Search customers, jobs, vehicles...">
-            </div>
-
             <div class="topbar-right">
                 <!-- Notification Bell -->
                 <div class="icon-btn notif-trigger" onclick="toggleNotifPanel()" id="notifBtn"
@@ -1195,7 +1190,7 @@ $isOwner = strtolower($role) === 'owner';
                         </div>
                     <?php endif; ?>
                 </div>
-                <button class="btn-primary" onclick="window.location.href='job_orders.php'">
+                <button class="btn-primary" onclick="window.location.href='new_job_order.php'">
                     <i class="bi bi-plus-lg"></i> New Job Order
                 </button>
                 <button class="logout-btn" onclick="window.location.href='logout.php'">
@@ -1226,7 +1221,7 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="job_orders.php?status=pending" class="stat-link">
+                <a href="new_job_order.php?status=pending" class="stat-link">
                     <div class="stat-card">
                         <div class="stat-icon"
                             style="background:#fef3c7; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
@@ -1240,7 +1235,7 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="job_orders.php?status=ongoing" class="stat-link">
+                <a href="new_job_order.php?status=ongoing" class="stat-link">
                     <div class="stat-card">
                         <div class="stat-icon"
                             style="background:#dbeafe; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
@@ -1254,7 +1249,7 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="job_orders.php?status=completed&date=today" class="stat-link">
+                <a href="new_job_order.php?status=completed&date=today" class="stat-link">
                     <div class="stat-card">
                         <div class="stat-icon"
                             style="background:#dcfce7; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
@@ -1268,7 +1263,7 @@ $isOwner = strtolower($role) === 'owner';
                     </div>
                 </a>
 
-                <a href="job_orders.php?status=completed&month=current" class="stat-link">
+                <a href="new_job_order.php?status=completed&month=current" class="stat-link">
                     <div class="stat-card">
                         <div class="stat-icon"
                             style="background:#dbeafe; border-radius:10px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
@@ -1351,7 +1346,7 @@ $isOwner = strtolower($role) === 'owner';
                             <div class="card-title">Active Job Orders</div>
                             <div class="card-sub">Pending and ongoing jobs</div>
                         </div>
-                        <a class="card-link" href="job_orders.php">View all →</a>
+                        <a class="card-link" href="new_job_order.php">View all →</a>
                     </div>
 
                     <table class="job-table">
@@ -1377,7 +1372,7 @@ $isOwner = strtolower($role) === 'owner';
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($activeJobRows as $job): ?>
-                                    <tr onclick="window.location.href='job_orders.php?view=<?= $job['job_order_id'] ?>'">
+                                    <tr onclick="window.location.href='new_job_order.php?view=<?= $job['job_order_id'] ?>'">
                                         <td>
                                             <span
                                                 class="job-id">#<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?></span>
@@ -1524,7 +1519,7 @@ $isOwner = strtolower($role) === 'owner';
                             <div class="card-title">Recently Completed</div>
                             <div class="card-sub">Latest finished jobs</div>
                         </div>
-                        <a class="card-link" href="job_orders.php?status=completed">View all →</a>
+                        <a class="card-link" href="new_job_order.php?status=completed">View all →</a>
                     </div>
 
                     <div class="vehicle-mini-list">
@@ -1535,7 +1530,7 @@ $isOwner = strtolower($role) === 'owner';
                             </div>
                         <?php else: ?>
                             <?php foreach ($recentCompletedJobs as $job): ?>
-                                <a href="job_orders.php?view=<?= $job['job_order_id'] ?>" class="vehicle-mini-item">
+                                <a href="new_job_order.php?view=<?= $job['job_order_id'] ?>" class="vehicle-mini-item">
                                     <div class="vehicle-mini-info">
                                         <span class="vehicle-mini-name">
                                             #<?= str_pad($job['job_order_id'], 5, '0', STR_PAD_LEFT) ?> -

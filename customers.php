@@ -19,6 +19,11 @@ if (!$user || $user['is_approved'] == 0) {
     exit();
 }
 
+if (in_array(strtolower($user['role']), ['mechanic', 'employee'])) {
+    header("Location: mechanic_dashboard.php");
+    exit();
+}
+
 $role = $user['role'];
 $firstname = htmlspecialchars($user['first_name']);
 $isOwner = strtolower($role) === 'owner';
